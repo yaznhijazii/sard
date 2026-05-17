@@ -1,0 +1,10 @@
+{
+  "name": "sard-magazine",
+  "version": "1.0.0",
+  "description": "سرد - منصة مقالات الذكاء الاصطناعي والأتمتة بالعربية",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx http-server -p 3000"
+  },
+  "dependencies": {}
+}
