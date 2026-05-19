@@ -182,7 +182,23 @@ const ELEMENTS = {
     generateAiSummaryBtn: document.getElementById("generate-ai-summary-btn"),
     aiSummaryContent: document.getElementById("ai-summary-content"),
     aiSummaryText: document.getElementById("ai-summary-text"),
-    aiSummaryBoxWrapper: document.getElementById("ai-summary-box-wrapper")
+    aiSummaryBoxWrapper: document.getElementById("ai-summary-box-wrapper"),
+    
+    // Spotlight Search Modal
+    spotlightSearchModal: document.getElementById("spotlight-search-modal"),
+    spotlightInput: document.getElementById("spotlight-input"),
+    spotlightResultsContainer: document.getElementById("spotlight-results-container"),
+    spotlightTags: document.querySelectorAll(".spotlight-tag"),
+    
+    // Zen Reading Mode
+    zenReaderWidget: document.getElementById("zen-reader-widget"),
+    zenWidgetToggle: document.getElementById("zen-widget-toggle"),
+    zenToggleBtn: document.getElementById("zen-toggle-btn"),
+    zenFontDecrease: document.getElementById("zen-font-decrease"),
+    zenFontIncrease: document.getElementById("zen-font-increase"),
+    
+    // Toast Container
+    toastContainer: document.getElementById("toast-notification-container")
 };
 
 // ==========================================================================
@@ -691,6 +707,11 @@ function showArticleDetail(articleId) {
         const nowSaved = STATE.bookmarks.includes(article.id);
         updateDetailBookmarkButtonState(nowSaved);
     };
+    
+    // Apply user's custom reading font size preference
+    if (typeof applyZenFontSize === "function") {
+        applyZenFontSize();
+    }
 }
 
 function updateDetailBookmarkButtonState(isSaved) {
@@ -787,27 +808,49 @@ function loadBookmarksFromStorage() {
     renderBookmarksDrawerList();
 }
 
-function saveBookmarksToStorage() {
+function toggleBookmark(articleId) {
+    const idx = STATE.bookmarks.indexOf(articleId);
+    let isSavedNow = false;
+    
+    if (idx === -1) {
+        STATE.bookmarks.push(articleId);
+        isSavedNow = true;
+        showToast("تم حفظ المقال في المفضلة", "bookmark");
+    } else {
+        STATE.bookmarks.splice(idx, 1);
+        isSavedNow = false;
+        showToast("تمت إزالة المقال من المفضلة", "info");
+    }
+    
     localStorage.setItem("sard_bookmarks", JSON.stringify(STATE.bookmarks));
     updateBookmarksUIBadge();
     renderBookmarksDrawerList();
     
-    // Refresh currently visible home feed cards to toggle card-level check states
-    if (STATE.currentView === "home") {
-        renderHomePage();
-    } else if (STATE.currentView === "articles") {
-        renderArchivePage();
-    }
+    // Perform targeted updates on grid cards or details buttons
+    updateBookmarkButtonsState(articleId, isSavedNow);
 }
 
-function toggleBookmark(articleId) {
-    const idx = STATE.bookmarks.indexOf(articleId);
-    if (idx === -1) {
-        STATE.bookmarks.push(articleId);
-    } else {
-        STATE.bookmarks.splice(idx, 1);
-    }
-    saveBookmarksToStorage();
+function updateBookmarkButtonsState(articleId, isSaved) {
+    const selector = `[data-id="${articleId}"].action-btn-circle, [data-id="${articleId}"].bookmark-action-btn`;
+    const buttons = document.querySelectorAll(selector);
+    
+    buttons.forEach(btn => {
+        if (btn.classList.contains("bookmark-action-btn")) {
+            updateDetailBookmarkButtonState(isSaved);
+        } else {
+            if (isSaved) {
+                btn.classList.add("saved");
+                btn.title = "تم الحفظ";
+                btn.innerHTML = `<i data-lucide="check"></i>`;
+            } else {
+                btn.classList.remove("saved");
+                btn.title = "حفظ المقال";
+                btn.innerHTML = `<i data-lucide="bookmark"></i>`;
+            }
+        }
+    });
+    
+    if (window.lucide) window.lucide.createIcons();
 }
 
 function updateBookmarksUIBadge() {
@@ -1156,9 +1199,10 @@ function bootstrapApp() {
         e.preventDefault();
         const articleUrl = window.location.href;
         navigator.clipboard.writeText(articleUrl).then(() => {
-            alert("تم نسخ رابط المقال إلى الحافظة بنجاح!");
+            showToast("تم نسخ رابط المقال إلى الحافظة بنجاح!", "check");
         }).catch(err => {
             console.error("فشل نسخ الرابط:", err);
+            showToast("فشل نسخ الرابط.", "alert-triangle");
         });
     });
     
@@ -1171,11 +1215,371 @@ function bootstrapApp() {
         }
     });
     
+    // Newsletter signup form handling
+    const newsletterForm = document.getElementById("newsletter-form");
+    if (newsletterForm) {
+        newsletterForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+            showToast("شكرًا للاشتراك في نشرة سرد التحريرية!", "check");
+            newsletterForm.reset();
+        });
+    }
+    
+    // Initialize premium additions
+    initSpotlightSearch();
+    initZenModeWidget();
+    
     // 7. Boot routing engine
     initRouter();
     
     // 8. Auto-render initial view states
     lucide.createIcons();
+}
+
+// ==========================================================================
+// H. GLASSMORPHIC TOAST NOTIFICATION SYSTEM
+// ==========================================================================
+function showToast(message, iconName = "info") {
+    if (!ELEMENTS.toastContainer) return;
+    
+    // Create toast element
+    const toast = document.createElement("div");
+    toast.className = "toast-message";
+    toast.innerHTML = `
+        <div class="toast-icon">
+            <i data-lucide="${iconName}"></i>
+        </div>
+        <span class="toast-text">${message}</span>
+    `;
+    
+    ELEMENTS.toastContainer.appendChild(toast);
+    
+    // Refresh Lucide icons inside the toast
+    if (window.lucide) {
+        window.lucide.createIcons({
+            attrs: {
+                'stroke-width': 2.5
+            },
+            nameAttr: 'data-lucide'
+        });
+    }
+    
+    // Animate in
+    setTimeout(() => {
+        toast.classList.add("show");
+    }, 10);
+    
+    // Auto-dismiss after 3.5 seconds
+    setTimeout(() => {
+        toast.classList.remove("show");
+        setTimeout(() => {
+            toast.remove();
+        }, 450);
+    }, 3500);
+}
+
+// ==========================================================================
+// I. ULTRA-PREMIUM SPOTLIGHT SEARCH SYSTEM
+// ==========================================================================
+let spotlightSearchState = {
+    isOpen: false,
+    selectedResultIndex: -1,
+    results: [],
+    filter: "all"
+};
+
+function initSpotlightSearch() {
+    if (!ELEMENTS.spotlightSearchModal) return;
+    
+    // Wire search toggle button in header to open Spotlight modal
+    ELEMENTS.searchToggleBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        openSpotlightSearch();
+    });
+    
+    // Wire Ctrl + K / Cmd + K to toggle Spotlight search
+    window.addEventListener("keydown", (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+            e.preventDefault();
+            if (spotlightSearchState.isOpen) {
+                closeSpotlightSearch();
+            } else {
+                openSpotlightSearch();
+            }
+        }
+        
+        // Escape to close
+        if (e.key === "Escape" && spotlightSearchState.isOpen) {
+            closeSpotlightSearch();
+        }
+    });
+    
+    // Close on backdrop overlay click
+    ELEMENTS.spotlightSearchModal.addEventListener("click", (e) => {
+        if (e.target === ELEMENTS.spotlightSearchModal) {
+            closeSpotlightSearch();
+        }
+    });
+    
+    // Keyboard navigation in result items
+    ELEMENTS.spotlightInput.addEventListener("keydown", handleSpotlightKeyboard);
+    
+    // Filter results on search input change
+    ELEMENTS.spotlightInput.addEventListener("input", () => {
+        renderSpotlightResults();
+    });
+    
+    // Handle category tag filtering in Spotlight
+    ELEMENTS.spotlightTags.forEach(tag => {
+        tag.addEventListener("click", () => {
+            ELEMENTS.spotlightTags.forEach(t => t.classList.remove("active"));
+            tag.classList.add("active");
+            spotlightSearchState.filter = tag.getAttribute("data-filter") || "all";
+            renderSpotlightResults();
+            ELEMENTS.spotlightInput.focus();
+        });
+    });
+}
+
+function openSpotlightSearch() {
+    spotlightSearchState.isOpen = true;
+    spotlightSearchState.selectedResultIndex = -1;
+    spotlightSearchState.filter = "all";
+    
+    ELEMENTS.spotlightInput.value = "";
+    ELEMENTS.spotlightTags.forEach(t => {
+        if (t.getAttribute("data-filter") === "all") {
+            t.classList.add("active");
+        } else {
+            t.classList.remove("active");
+        }
+    });
+    
+    ELEMENTS.spotlightSearchModal.classList.add("active");
+    setTimeout(() => ELEMENTS.spotlightInput.focus(), 150);
+    renderSpotlightResults();
+}
+
+function closeSpotlightSearch() {
+    spotlightSearchState.isOpen = false;
+    ELEMENTS.spotlightSearchModal.classList.remove("active");
+    ELEMENTS.spotlightInput.blur();
+}
+
+function renderSpotlightResults() {
+    const query = ELEMENTS.spotlightInput.value.toLowerCase().trim();
+    const filter = spotlightSearchState.filter;
+    
+    const matches = ARTICLES_DATABASE.filter(art => {
+        const matchesCategory = filter === "all" || art.categories.includes(filter);
+        if (!matchesCategory) return false;
+        if (!query) return true;
+        
+        return art.title.toLowerCase().includes(query) ||
+               art.description.toLowerCase().includes(query) ||
+               art.categories.some(c => c.toLowerCase().includes(query));
+    });
+    
+    spotlightSearchState.results = matches;
+    spotlightSearchState.selectedResultIndex = -1;
+    
+    if (!query && matches.length === ARTICLES_DATABASE.length) {
+        ELEMENTS.spotlightResultsContainer.innerHTML = `
+            <div class="spotlight-empty-state">
+                <i data-lucide="sparkles"></i>
+                <p>ابدأ كتابة عنوان المقال أو الموضوع للبحث الفوري...</p>
+                <span>تلميحة: اضغط على <kbd>Ctrl</kbd> + <kbd>K</kbd> في أي وقت لفتح محرك البحث السريع!</span>
+            </div>
+        `;
+        if (window.lucide) window.lucide.createIcons();
+        return;
+    }
+    
+    if (matches.length === 0) {
+        ELEMENTS.spotlightResultsContainer.innerHTML = `
+            <div class="spotlight-empty-state">
+                <i data-lucide="search-slash"></i>
+                <p>لا توجد نتائج متطابقة للبحث عن "${query}"</p>
+                <span>جرّب البحث بكلمات أخرى أو اختر تصنيفاً مختلفاً.</span>
+            </div>
+        `;
+        if (window.lucide) window.lucide.createIcons();
+        return;
+    }
+    
+    ELEMENTS.spotlightResultsContainer.innerHTML = matches.map((art, idx) => {
+        return `
+            <div class="spotlight-item" data-id="${art.id}" data-index="${idx}">
+                <div class="spotlight-item-icon">
+                    <i data-lucide="file-text"></i>
+                </div>
+                <div class="spotlight-item-text">
+                    <span class="spotlight-item-title">${art.title}</span>
+                    <span class="spotlight-item-desc">${art.description}</span>
+                </div>
+            </div>
+        `;
+    }).join("");
+    
+    if (window.lucide) window.lucide.createIcons();
+    
+    const items = ELEMENTS.spotlightResultsContainer.querySelectorAll(".spotlight-item");
+    items.forEach(item => {
+        item.addEventListener("click", () => {
+            const articleId = item.getAttribute("data-id");
+            navigateTo(`article/${articleId}`);
+            closeSpotlightSearch();
+        });
+        item.addEventListener("mouseenter", () => {
+            const index = parseInt(item.getAttribute("data-index"), 10);
+            updateSpotlightSelection(index);
+        });
+    });
+}
+
+function updateSpotlightSelection(index) {
+    spotlightSearchState.selectedResultIndex = index;
+    const items = ELEMENTS.spotlightResultsContainer.querySelectorAll(".spotlight-item");
+    
+    items.forEach(item => {
+        const itemIdx = parseInt(item.getAttribute("data-index"), 10);
+        if (itemIdx === index) {
+            item.classList.add("active");
+            item.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        } else {
+            item.classList.remove("active");
+        }
+    });
+}
+
+function handleSpotlightKeyboard(e) {
+    const resultsCount = spotlightSearchState.results.length;
+    if (resultsCount === 0) return;
+    
+    if (e.key === "ArrowDown") {
+        e.preventDefault();
+        let nextIndex = spotlightSearchState.selectedResultIndex + 1;
+        if (nextIndex >= resultsCount) nextIndex = 0;
+        updateSpotlightSelection(nextIndex);
+    } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        let prevIndex = spotlightSearchState.selectedResultIndex - 1;
+        if (prevIndex < 0) prevIndex = resultsCount - 1;
+        updateSpotlightSelection(prevIndex);
+    } else if (e.key === "Enter") {
+        e.preventDefault();
+        const activeItem = ELEMENTS.spotlightResultsContainer.querySelector(".spotlight-item.active");
+        if (activeItem) {
+            const articleId = activeItem.getAttribute("data-id");
+            navigateTo(`article/${articleId}`);
+            closeSpotlightSearch();
+        } else if (spotlightSearchState.results.length > 0) {
+            const articleId = spotlightSearchState.results[0].id;
+            navigateTo(`article/${articleId}`);
+            closeSpotlightSearch();
+        }
+    }
+}
+
+// ==========================================================================
+// J. ZEN READING MODE & FONT SIZE WIDGET
+// ==========================================================================
+let zenModeState = {
+    isActive: false,
+    fontSize: 20
+};
+
+function initZenModeWidget() {
+    if (!ELEMENTS.zenReaderWidget) return;
+    
+    // Toggle menu
+    ELEMENTS.zenWidgetToggle.addEventListener("click", (e) => {
+        e.stopPropagation();
+        ELEMENTS.zenReaderWidget.classList.toggle("active");
+    });
+    
+    // Close menu on click outside
+    document.addEventListener("click", () => {
+        ELEMENTS.zenReaderWidget.classList.remove("active");
+    });
+    
+    ELEMENTS.zenReaderWidget.addEventListener("click", (e) => {
+        e.stopPropagation();
+    });
+    
+    // Toggle Zen Mode active class
+    ELEMENTS.zenToggleBtn.addEventListener("click", () => {
+        toggleZenMode();
+    });
+    
+    // Scale font sizes
+    ELEMENTS.zenFontIncrease.addEventListener("click", () => {
+        adjustZenFontSize(2);
+    });
+    
+    ELEMENTS.zenFontDecrease.addEventListener("click", () => {
+        adjustZenFontSize(-2);
+    });
+    
+    loadZenSettings();
+}
+
+function loadZenSettings() {
+    const savedZen = localStorage.getItem("sard_zen_active") === "true";
+    const savedFontSize = parseInt(localStorage.getItem("sard_zen_font_size"), 10);
+    
+    if (savedFontSize >= 16 && savedFontSize <= 28) {
+        zenModeState.fontSize = savedFontSize;
+    }
+    
+    applyZenFontSize();
+    
+    // Apply Zen Mode if saved as active
+    if (savedZen) {
+        toggleZenMode(true);
+    }
+}
+
+function toggleZenMode(forceState = null) {
+    const shouldBeActive = forceState !== null ? forceState : !zenModeState.isActive;
+    zenModeState.isActive = shouldBeActive;
+    
+    const icon = ELEMENTS.zenToggleBtn.querySelector("i") || ELEMENTS.zenToggleBtn.querySelector("svg");
+    const textSpan = ELEMENTS.zenToggleBtn.querySelector("span");
+    
+    if (shouldBeActive) {
+        document.body.classList.add("zen-mode-active");
+        ELEMENTS.zenToggleBtn.classList.add("active");
+        if (textSpan) textSpan.textContent = "تعطيل الوضع الهادئ";
+        if (icon) icon.setAttribute("data-lucide", "eye-off");
+        showToast("تم تفعيل وضع القراءة الهادئ", "eye");
+    } else {
+        document.body.classList.remove("zen-mode-active");
+        ELEMENTS.zenToggleBtn.classList.remove("active");
+        if (textSpan) textSpan.textContent = "الوضع الهادئ";
+        if (icon) icon.setAttribute("data-lucide", "eye");
+        showToast("تم إلغاء وضع القراءة الهادئ", "info");
+    }
+    
+    localStorage.setItem("sard_zen_active", shouldBeActive);
+    if (window.lucide) window.lucide.createIcons();
+}
+
+function adjustZenFontSize(delta) {
+    let newSize = zenModeState.fontSize + delta;
+    if (newSize < 16) newSize = 16;
+    if (newSize > 28) newSize = 28;
+    
+    zenModeState.fontSize = newSize;
+    applyZenFontSize();
+    localStorage.setItem("sard_zen_font_size", newSize);
+}
+
+function applyZenFontSize() {
+    if (ELEMENTS.detailContent) {
+        ELEMENTS.detailContent.style.fontSize = `${zenModeState.fontSize}px`;
+        ELEMENTS.detailContent.style.lineHeight = `${1.55 + (zenModeState.fontSize - 20) * 0.012}`;
+    }
 }
 
 // Bootstrap complete DOM components lifecycle hook
