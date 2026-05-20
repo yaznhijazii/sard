@@ -36,6 +36,15 @@
 </head>
 <body class="light-mode">
 
+    <!-- Elegant Editorial Screen Preloader -->
+    <div class="brand-preloader" id="brand-preloader">
+        <div class="preloader-content">
+            <span class="preloader-dot"></span>
+            <span class="preloader-logo">سَرد</span>
+            <div class="preloader-line"></div>
+        </div>
+    </div>
+
     <!-- Premium Animated Background Ambient Glow Blobs -->
     <div class="ambient-glow-blob blob-1"></div>
     <div class="ambient-glow-blob blob-2"></div>
@@ -238,18 +247,46 @@
 
                 <!-- Article AI Summary Feature -->
                 <section class="ai-summary-box-wrapper" id="ai-summary-box-wrapper">
-                    <div class="ai-summary-box-header">
-                        <div class="ai-summary-title">
-                            <i data-lucide="sparkles" class="sparkles-icon"></i>
-                            <span>ملخص الذكاء الاصطناعي (ميزة تجريبية)</span>
-                        </div>
-                        <button class="ai-summary-btn" id="generate-ai-summary-btn">
-                            <span>توليد الملخص الآن</span>
-                            <i data-lucide="wand-2"></i>
+                    <div class="ai-summary-tabs">
+                        <button class="ai-summary-tab-btn active" id="tab-summary-btn" data-tab="summary">
+                            <i data-lucide="sparkles"></i>
+                            <span>ملخص المقال</span>
+                        </button>
+                        <button class="ai-summary-tab-btn" id="tab-chat-btn" data-tab="chat">
+                            <i data-lucide="message-square"></i>
+                            <span>اسأل سرد الذكي</span>
                         </button>
                     </div>
-                    <div class="ai-summary-box-content collapse-summary" id="ai-summary-content">
-                        <p class="ai-summary-text" id="ai-summary-text">اضغط على الزر أعلاه لتوليد ملخص سريع للمقال بواسطة نموذج سرد الذكي.</p>
+                    
+                    <div class="ai-tab-content active" id="ai-tab-summary">
+                        <div class="ai-summary-box-header">
+                            <div class="ai-summary-title">
+                                <span>ملخص سريع للمقال بواسطة نموذج سرد الذكي.</span>
+                            </div>
+                            <button class="ai-summary-btn" id="generate-ai-summary-btn">
+                                <span>توليد الملخص الآن</span>
+                                <i data-lucide="wand-2"></i>
+                            </button>
+                        </div>
+                        <div class="ai-summary-box-content collapse-summary" id="ai-summary-content">
+                            <p class="ai-summary-text" id="ai-summary-text">اضغط على الزر أعلاه لتوليد ملخص سريع للمقال بواسطة نموذج سرد الذكي.</p>
+                        </div>
+                    </div>
+
+                    <div class="ai-tab-content" id="ai-tab-chat" style="display:none;">
+                        <div class="ai-chat-container">
+                            <div class="ai-chat-messages" id="ai-chat-messages-box">
+                                <div class="chat-message bot-message">
+                                    <div class="chat-avatar"><i data-lucide="bot"></i></div>
+                                    <div class="chat-text">أهلاً بك! أنا مساعد سرد الذكي، يمكنك سؤالي حول محتوى هذا المقال أو اختيار أحد الأسئلة المقترحة بالأسفل.</div>
+                                </div>
+                            </div>
+                            <div class="ai-chat-suggestions" id="ai-chat-suggestions-box"></div>
+                            <div class="ai-chat-input-row">
+                                <input type="text" id="ai-chat-user-input" placeholder="اكتب سؤالك هنا حول المقال...">
+                                <button id="ai-chat-send-btn"><i data-lucide="send"></i></button>
+                            </div>
+                        </div>
                     </div>
                 </section>
 
@@ -261,6 +298,20 @@
                 <!-- Article Body Content -->
                 <section class="article-reader-body" id="detail-content">
                     <!-- Loaded dynamically -->
+                </section>
+
+                <!-- Article Companion Interactive Widget -->
+                <section class="interactive-widget-section" id="article-interactive-widget-wrapper" style="display:none;">
+                    <div class="widget-header-editorial">
+                        <div class="widget-label-container">
+                            <i data-lucide="sparkles" class="widget-sparkle"></i>
+                            <span class="widget-label">ملحق تفاعلي تجريبي</span>
+                        </div>
+                        <div class="widget-header-line"></div>
+                    </div>
+                    <div class="interactive-widget-card" id="article-interactive-widget">
+                        <!-- Loaded dynamically based on article id -->
+                    </div>
                 </section>
 
                 <!-- Article Reader Footer Share and Bookmark -->
@@ -334,12 +385,43 @@
                 <i data-lucide="x"></i>
             </button>
         </div>
-        <div class="drawer-content" id="bookmarks-drawer-content">
-            <!-- Loaded dynamically in app.js -->
-            <div class="empty-bookmarks-state">
-                <i data-lucide="bookmark" class="empty-icon"></i>
-                <p>لم تقم بحفظ أي مقالات بعد.</p>
-                <span>تصفح مقالاتنا واضغط على زر الحفظ للرجوع إليها لاحقاً دون الحاجة للاتصال بالإنترنت!</span>
+        <div class="drawer-content">
+            <!-- Reading Analytics Dashboard -->
+            <div class="reading-stats-dashboard" id="reading-stats-dashboard">
+                <div class="stats-dashboard-title">
+                    <i data-lucide="activity"></i>
+                    <span>تحليل الجلسة ونشاط القراءة</span>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <span class="stat-value" id="stats-wpm-val">0</span>
+                        <span class="stat-label">سرعة القراءة (كلمة/د)</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-value" id="stats-time-val">0:00</span>
+                        <span class="stat-label">زمن الجلسة النشط</span>
+                    </div>
+                </div>
+                <div class="stats-goal-container">
+                    <div class="stats-goal-bar-wrapper">
+                        <div class="stats-goal-bar" id="stats-goal-bar" style="width: 0%;"></div>
+                    </div>
+                    <div class="stats-goal-text">
+                        <span>هدف القراءة (10 دقائق)</span>
+                        <span id="stats-goal-percent">0%</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="drawer-section-separator"></div>
+            
+            <div id="bookmarks-drawer-content">
+                <!-- Loaded dynamically in app.js -->
+                <div class="empty-bookmarks-state">
+                    <i data-lucide="bookmark" class="empty-icon"></i>
+                    <p>لم تقم بحفظ أي مقالات بعد.</p>
+                    <span>تصفح مقالاتنا واضغط على زر الحفظ للرجوع إليها لاحقاً دون الحاجة للاتصال بالإنترنت!</span>
+                </div>
             </div>
         </div>
     </aside>
@@ -427,10 +509,33 @@
                 <span>الوضع الهادئ</span>
             </div>
             <div class="zen-menu-separator"></div>
+            <div class="zen-menu-item" id="zen-click-sound-toggle" title="تفعيل مؤثرات التفاعل الصوتية">
+                <i data-lucide="volume-2"></i>
+                <span>مؤثرات التفاعل الصوتية</span>
+            </div>
+            <div class="zen-menu-separator"></div>
             <div class="zen-menu-item-scale">
                 <button id="zen-font-decrease" title="تصغير الخط" aria-label="تصغير الخط">-</button>
-                <span class="zen-font-label">الخط</span>
+                <span class="zen-font-label">حجم الخط</span>
                 <button id="zen-font-increase" title="تكبير الخط" aria-label="تكبير الخط">+</button>
+            </div>
+            <div class="zen-menu-separator"></div>
+            <div class="zen-soundscape-container">
+                <span class="zen-menu-section-title"><i data-lucide="music-4"></i> صوتيات التركيز</span>
+                <div class="zen-sound-buttons">
+                    <button class="zen-sound-btn" data-sound="rain" title="مطر هادئ"><i data-lucide="cloud-rain"></i></button>
+                    <button class="zen-sound-btn" data-sound="wind" title="رياح هادئة"><i data-lucide="wind"></i></button>
+                    <button class="zen-sound-btn" data-sound="waves" title="موجات التركيز"><i data-lucide="waves"></i></button>
+                    <button class="zen-sound-btn" id="zen-sound-mute" title="كتم الصوت"><i data-lucide="volume-x"></i></button>
+                </div>
+            </div>
+            <div class="zen-menu-separator"></div>
+            <div class="zen-scroll-container">
+                <span class="zen-menu-section-title"><i data-lucide="chevrons-down"></i> القراءة التلقائية</span>
+                <div class="zen-scroll-controls">
+                    <button class="zen-scroll-btn" id="zen-scroll-play" title="تشغيل التمرير التلقائي"><i data-lucide="play"></i></button>
+                    <input type="range" id="zen-scroll-speed" min="10" max="80" value="30" title="سرعة التمرير">
+                </div>
             </div>
         </div>
     </div>

@@ -116,7 +116,8 @@ const STATE = {
     currentFilter: "all",
     searchQuery: "",
     bookmarks: [],
-    summarizedArticles: new Set() // Keep track of articles where AI Summary was generated in the session
+    summarizedArticles: new Set(), // Keep track of articles where AI Summary was generated in the session
+    clickSoundEnabled: true
 };
 
 // 3. Document Elements Selection
@@ -226,6 +227,9 @@ function handleHashRouting() {
     closeMobileDrawer();
     closeBookmarksDrawer();
     
+    // Play transition sound (paper flip)
+    AmbientAudio.playFlip();
+    
     if (hash === "#home") {
         navigateToView("home");
     } else if (hash === "#about") {
@@ -265,6 +269,26 @@ function navigateTo(view, filter = "all", searchQuery = "") {
 function navigateToView(viewName) {
     STATE.currentView = viewName;
     
+    // Clear auto scroll when navigating away
+    if (typeof stopAutoScroll === "function") stopAutoScroll();
+    
+    // Reset reading analytics focus article
+    ReadingAnalytics.setCurrentArticle(null, 0);
+    
+    // Get current active view and animate transition
+    const activeViewEl = document.querySelector(".active-view");
+    if (activeViewEl) {
+        activeViewEl.classList.add("view-fade-out");
+        setTimeout(() => {
+            activeViewEl.classList.remove("view-fade-out");
+            performViewTransition(viewName);
+        }, 250);
+    } else {
+        performViewTransition(viewName);
+    }
+}
+
+function performViewTransition(viewName) {
     // Hide all views
     [ELEMENTS.viewHome, ELEMENTS.viewArticles, ELEMENTS.viewArticleDetail, ELEMENTS.viewAbout].forEach(view => {
         view.classList.remove("active-view");
@@ -278,14 +302,52 @@ function navigateToView(viewName) {
     
     // Show active view and trigger render logic
     if (viewName === "home") {
-        ELEMENTS.viewHome.classList.add("active-view");
-        renderHomePage();
+        renderHomeSkeletons();
+        setTimeout(() => {
+            ELEMENTS.viewHome.classList.add("active-view");
+            renderHomePage();
+        }, 250);
     } else if (viewName === "articles") {
-        ELEMENTS.viewArticles.classList.add("active-view");
-        renderArchivePage();
+        renderArchiveSkeletons();
+        setTimeout(() => {
+            ELEMENTS.viewArticles.classList.add("active-view");
+            renderArchivePage();
+        }, 250);
     } else if (viewName === "about") {
         ELEMENTS.viewAbout.classList.add("active-view");
     }
+}
+
+function renderHomeSkeletons() {
+    ELEMENTS.featuredArticleContainer.innerHTML = `
+        <div class="skeleton-card" style="height: 480px; grid-column: span 3;">
+            <div class="skeleton-img" style="height: 300px;"></div>
+            <div class="skeleton-text title"></div>
+            <div class="skeleton-text desc-1"></div>
+            <div class="skeleton-text footer"></div>
+        </div>
+    `;
+    ELEMENTS.articlesGrid.innerHTML = Array(3).fill(0).map(() => `
+        <div class="skeleton-card">
+            <div class="skeleton-img"></div>
+            <div class="skeleton-text title"></div>
+            <div class="skeleton-text desc-1"></div>
+            <div class="skeleton-text desc-2"></div>
+            <div class="skeleton-text footer"></div>
+        </div>
+    `).join("");
+}
+
+function renderArchiveSkeletons() {
+    ELEMENTS.archiveGrid.innerHTML = Array(6).fill(0).map(() => `
+        <div class="skeleton-card">
+            <div class="skeleton-img"></div>
+            <div class="skeleton-text title"></div>
+            <div class="skeleton-text desc-1"></div>
+            <div class="skeleton-text desc-2"></div>
+            <div class="skeleton-text footer"></div>
+        </div>
+    `).join("");
 }
 
 function updateNavbarActiveState(viewName) {
@@ -627,6 +689,22 @@ function showArticleDetail(articleId) {
         return;
     }
     
+    // Reset auto-scroll when switching articles
+    if (typeof stopAutoScroll === "function") stopAutoScroll();
+    
+    const activeViewEl = document.querySelector(".active-view");
+    if (activeViewEl) {
+        activeViewEl.classList.add("view-fade-out");
+        setTimeout(() => {
+            activeViewEl.classList.remove("view-fade-out");
+            performArticleDetailTransition(article);
+        }, 250);
+    } else {
+        performArticleDetailTransition(article);
+    }
+}
+
+function performArticleDetailTransition(article) {
     // Show article details view container
     [ELEMENTS.viewHome, ELEMENTS.viewArticles, ELEMENTS.viewAbout].forEach(view => {
         view.classList.remove("active-view");
@@ -637,6 +715,11 @@ function showArticleDetail(articleId) {
     // Bookmark Toggle Button set
     const isSaved = STATE.bookmarks.includes(article.id);
     updateDetailBookmarkButtonState(isSaved);
+    
+    // Record current article in reading stats
+    const rawText = article.content.replace(/<[^>]*>/g, '');
+    const wordCount = rawText.split(/\s+/).length;
+    ReadingAnalytics.setCurrentArticle(article.id, wordCount);
     
     // Setup detail header categories
     ELEMENTS.detailCategories.innerHTML = article.categories.map(cat => {
@@ -661,16 +744,26 @@ function showArticleDetail(articleId) {
     // Content body fill
     ELEMENTS.detailContent.innerHTML = article.content;
     
+    // Reset AI Tab views
+    const summaryBtn = document.getElementById("tab-summary-btn");
+    const chatBtn = document.getElementById("tab-chat-btn");
+    const tabSummary = document.getElementById("ai-tab-summary");
+    const tabChat = document.getElementById("ai-tab-chat");
+    if (summaryBtn && chatBtn && tabSummary && tabChat) {
+        summaryBtn.classList.add("active");
+        chatBtn.classList.remove("active");
+        tabSummary.style.display = "block";
+        tabChat.style.display = "none";
+    }
+    
     // Handle AI Summary states
     if (STATE.summarizedArticles.has(article.id)) {
-        // Already generated, show it directly with no typewriter simulation
         ELEMENTS.aiSummaryContent.classList.remove("collapse-summary");
         ELEMENTS.aiSummaryText.textContent = article.aiSummary;
         ELEMENTS.generateAiSummaryBtn.innerHTML = `<span>الملخص جاهز</span> <i data-lucide="check"></i>`;
         ELEMENTS.generateAiSummaryBtn.style.opacity = "0.7";
         ELEMENTS.generateAiSummaryBtn.disabled = true;
     } else {
-        // Reset summary box interface
         ELEMENTS.aiSummaryContent.classList.add("collapse-summary");
         ELEMENTS.aiSummaryText.textContent = "اضغط على الزر أعلاه لتوليد ملخص سريع للمقال بواسطة نموذج سرد الذكي.";
         ELEMENTS.generateAiSummaryBtn.innerHTML = `<span>توليد الملخص الآن</span> <i data-lucide="wand-2"></i>`;
@@ -678,7 +771,13 @@ function showArticleDetail(articleId) {
         ELEMENTS.generateAiSummaryBtn.disabled = false;
     }
     
-    // Render Related Articles (Find items sharing at least one category tag, excluding the current article)
+    // Initialize AI Chatbot for this article
+    AIChatCompanion.init(article.id);
+    
+    // Load dynamic interactive companion widget
+    renderArticleInteractiveWidget(article.id);
+    
+    // Render Related Articles
     const related = ARTICLES_DATABASE.filter(art => {
         return art.id !== article.id && art.categories.some(cat => article.categories.includes(cat));
     }).slice(0, 3);
@@ -778,6 +877,34 @@ function attachCardsEventListeners() {
             const articleId = card.getAttribute("data-id");
             navigateTo(`article/${articleId}`);
         };
+        
+        // --- 3D TILT EFFECT START ---
+        if (!card.querySelector(".card-glare")) {
+            const glare = document.createElement("div");
+            glare.className = "card-glare";
+            card.appendChild(glare);
+        }
+        
+        card.addEventListener("mousemove", (e) => {
+            const rect = card.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const px = x / rect.width;
+            const py = y / rect.height;
+            
+            const tiltX = (0.5 - py) * 10;
+            const tiltY = (px - 0.5) * 10;
+            
+            card.style.transform = `perspective(1000px) rotateX(${tiltX}deg) rotateY(${tiltY}deg) scale3d(1.015, 1.015, 1.015)`;
+            card.style.setProperty("--x", `${px * 100}%`);
+            card.style.setProperty("--y", `${py * 100}%`);
+        });
+        
+        card.addEventListener("mouseleave", () => {
+            card.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)`;
+        });
+        // --- 3D TILT EFFECT END ---
     });
     
     // 2. Intercept card-level Save Bookmark Buttons
@@ -1007,10 +1134,38 @@ function initThemeToggler() {
         setDarkMode(false);
     }
     
-    ELEMENTS.themeToggleBtn.addEventListener("click", () => {
-        const isDarkNow = document.body.classList.contains("dark-mode");
-        setDarkMode(!isDarkNow);
-    });
+    ELEMENTS.themeToggleBtn.addEventListener("click", handleThemeToggleClick);
+}
+
+function handleThemeToggleClick(e) {
+    const isDarkNow = document.body.classList.contains("dark-mode");
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX || (rect.left + rect.width / 2);
+    const y = e.clientY || (rect.top + rect.height / 2);
+    triggerThemeTransition(!isDarkNow, x, y);
+}
+
+function triggerThemeTransition(enable, clientX, clientY) {
+    const circle = document.createElement("div");
+    circle.className = "theme-ripple-circle";
+    
+    const targetBg = enable ? "#0b0c0e" : "#fbfaf7";
+    circle.style.backgroundColor = targetBg;
+    circle.style.left = `${clientX}px`;
+    circle.style.top = `${clientY}px`;
+    
+    document.body.appendChild(circle);
+    
+    circle.offsetWidth; // Trigger reflow
+    circle.classList.add("active");
+    
+    setTimeout(() => {
+        setDarkMode(enable);
+        circle.style.opacity = "0";
+        setTimeout(() => {
+            circle.remove();
+        }, 300);
+    }, 550);
 }
 
 function setDarkMode(enable) {
@@ -1116,11 +1271,7 @@ function initMobileDockHandlers() {
     // Theme toggle button click inside the dock
     const dockThemeBtn = document.getElementById("dock-theme-btn");
     if (dockThemeBtn) {
-        dockThemeBtn.addEventListener("click", (e) => {
-            e.preventDefault();
-            const isDarkNow = document.body.classList.contains("dark-mode");
-            setDarkMode(!isDarkNow);
-        });
+        dockThemeBtn.addEventListener("click", handleThemeToggleClick);
     }
     
     // Bookmarks drawer toggle inside the dock
@@ -1220,7 +1371,11 @@ function bootstrapApp() {
     if (newsletterForm) {
         newsletterForm.addEventListener("submit", (e) => {
             e.preventDefault();
+            const submitBtn = newsletterForm.querySelector("button");
             showToast("شكرًا للاشتراك في نشرة سرد التحريرية!", "check");
+            if (submitBtn) {
+                Confetti.trigger(submitBtn);
+            }
             newsletterForm.reset();
         });
     }
@@ -1228,12 +1383,40 @@ function bootstrapApp() {
     // Initialize premium additions
     initSpotlightSearch();
     initZenModeWidget();
+    initAiTabs();
     
     // 7. Boot routing engine
     initRouter();
     
     // 8. Auto-render initial view states
     lucide.createIcons();
+    
+    // Initialize Reading Analytics tracking
+    ReadingAnalytics.init();
+    
+    // Wire global click handler for tactile micro-sounds
+    document.addEventListener("click", (e) => {
+        const interactive = e.target.closest("button, a, .nav-link, .filter-tag-btn, .zen-menu-item, .dock-link, .bookmark-item, .suggestion-chip, .sandbox-preset-btn");
+        if (interactive) {
+            // Check if it's a hash routing anchor
+            if (interactive.tagName === "A" && interactive.getAttribute("href") && interactive.getAttribute("href").startsWith("#")) {
+                // Let handleHashRouting play the page flip sound instead
+                return;
+            }
+            AmbientAudio.playClick();
+        }
+    });
+    
+    // Hide brand preloader after app initialization
+    const preloader = document.getElementById("brand-preloader");
+    if (preloader) {
+        setTimeout(() => {
+            preloader.classList.add("fade-out");
+            setTimeout(() => {
+                preloader.remove();
+            }, 800);
+        }, 1500);
+    }
 }
 
 // ==========================================================================
@@ -1521,12 +1704,65 @@ function initZenModeWidget() {
         adjustZenFontSize(-2);
     });
     
+    // Hook Soundscape Buttons
+    const soundBtns = ELEMENTS.zenReaderWidget.querySelectorAll(".zen-sound-btn");
+    const muteBtn = document.getElementById("zen-sound-mute");
+    
+    soundBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+            const sound = btn.getAttribute("data-sound");
+            
+            if (btn.classList.contains("active")) {
+                btn.classList.remove("active");
+                AmbientAudio.stopAll();
+            } else {
+                soundBtns.forEach(b => b.classList.remove("active"));
+                if (muteBtn) muteBtn.classList.remove("active");
+                btn.classList.add("active");
+                AmbientAudio.play(sound);
+            }
+        });
+    });
+    
+    if (muteBtn) {
+        muteBtn.addEventListener("click", () => {
+            muteBtn.classList.toggle("active");
+            soundBtns.forEach(b => b.classList.remove("active"));
+            AmbientAudio.stopAll();
+        });
+    }
+    
+    // Hook click sound toggle
+    const clickSoundBtn = document.getElementById("zen-click-sound-toggle");
+    if (clickSoundBtn) {
+        if (STATE.clickSoundEnabled) {
+            clickSoundBtn.classList.add("active");
+        } else {
+            clickSoundBtn.classList.remove("active");
+        }
+        
+        clickSoundBtn.addEventListener("click", () => {
+            STATE.clickSoundEnabled = !STATE.clickSoundEnabled;
+            clickSoundBtn.classList.toggle("active", STATE.clickSoundEnabled);
+            localStorage.setItem("sard_click_sound", STATE.clickSoundEnabled);
+            showToast(STATE.clickSoundEnabled ? "تم تفعيل مؤثرات التفاعل الصوتية" : "تم كتم مؤثرات التفاعل الصوتية", "volume-2");
+        });
+    }
+    
+    // Initialize auto-scroll
+    initAutoScroll();
+    
     loadZenSettings();
 }
 
 function loadZenSettings() {
     const savedZen = localStorage.getItem("sard_zen_active") === "true";
     const savedFontSize = parseInt(localStorage.getItem("sard_zen_font_size"), 10);
+    const savedClickSound = localStorage.getItem("sard_click_sound");
+    
+    if (savedClickSound !== null) {
+        STATE.clickSoundEnabled = savedClickSound === "true";
+    }
     
     if (savedFontSize >= 16 && savedFontSize <= 28) {
         zenModeState.fontSize = savedFontSize;
@@ -1582,5 +1818,1151 @@ function applyZenFontSize() {
     }
 }
 
+// Reading Analytics System
+const ReadingAnalytics = {
+    sessionStartTime: Date.now(),
+    activeReadingTime: 0, // in seconds
+    totalWordsRead: 0,
+    currentArticleWords: 0,
+    currentArticleId: null,
+    articleReadPercentages: {}, // articleId -> maxScrollPercent
+    timerInterval: null,
+    
+    init() {
+        this.sessionStartTime = Date.now();
+        this.startTimer();
+        
+        // Listen to scroll events on window to track progress through article detail view
+        window.addEventListener("scroll", () => {
+            this.trackScrollProgress();
+        });
+        
+        // Update stats UI periodically
+        setInterval(() => {
+            this.updateStatsUI();
+        }, 1000);
+    },
+    
+    startTimer() {
+        if (this.timerInterval) clearInterval(this.timerInterval);
+        this.timerInterval = setInterval(() => {
+            // Only count time if tab/window is active
+            if (!document.hidden) {
+                this.activeReadingTime++;
+            }
+        }, 1000);
+    },
+    
+    setCurrentArticle(articleId, wordCount) {
+        this.currentArticleId = articleId;
+        this.currentArticleWords = wordCount;
+        if (articleId && !this.articleReadPercentages[articleId]) {
+            this.articleReadPercentages[articleId] = 0;
+        }
+    },
+    
+    trackScrollProgress() {
+        if (!this.currentArticleId || !ELEMENTS.detailContent) return;
+        
+        const scrollTop = window.scrollY;
+        const windowHeight = window.innerHeight;
+        const elementTop = ELEMENTS.detailContent.offsetTop;
+        const elementHeight = ELEMENTS.detailContent.offsetHeight;
+        
+        // Calculate read progress depth
+        const readDepth = scrollTop + windowHeight - elementTop;
+        let percent = Math.max(0, Math.min(100, (readDepth / elementHeight) * 100));
+        
+        if (percent > this.articleReadPercentages[this.currentArticleId]) {
+            this.articleReadPercentages[this.currentArticleId] = percent;
+            this.recalculateWordsRead();
+        }
+    },
+    
+    recalculateWordsRead() {
+        let total = 0;
+        Object.keys(this.articleReadPercentages).forEach(id => {
+            const article = ARTICLES_DATABASE.find(art => art.id === id);
+            if (article) {
+                const wordCount = article.content.replace(/<[^>]*>/g, '').split(/\s+/).length;
+                const percent = this.articleReadPercentages[id] / 100;
+                total += Math.round(wordCount * percent);
+            }
+        });
+        this.totalWordsRead = total;
+    },
+    
+    getWPM() {
+        if (this.activeReadingTime < 10) return 0; // Avoid high initial spikes
+        const minutes = this.activeReadingTime / 60;
+        return Math.round(this.totalWordsRead / minutes);
+    },
+    
+    getFormattedActiveTime() {
+        const mins = Math.floor(this.activeReadingTime / 60);
+        const secs = this.activeReadingTime % 60;
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    },
+    
+    updateStatsUI() {
+        const wpmVal = document.getElementById("stats-wpm-val");
+        const timeVal = document.getElementById("stats-time-val");
+        const goalBar = document.getElementById("stats-goal-bar");
+        const goalPercent = document.getElementById("stats-goal-percent");
+        
+        const wpm = this.getWPM();
+        const activeTimeStr = this.getFormattedActiveTime();
+        
+        if (wpmVal) wpmVal.textContent = wpm > 0 ? wpm : "---";
+        if (timeVal) timeVal.textContent = activeTimeStr;
+        
+        // Goal: 10 minutes (600 seconds)
+        const goalSeconds = 600;
+        const progressPercent = Math.min(100, Math.round((this.activeReadingTime / goalSeconds) * 100));
+        
+        if (goalBar) goalBar.style.width = `${progressPercent}%`;
+        if (goalPercent) goalPercent.textContent = `${progressPercent}%`;
+    }
+};
+
 // Bootstrap complete DOM components lifecycle hook
 document.addEventListener("DOMContentLoaded", bootstrapApp);
+
+/* ==========================================================================
+   UI/UX ADDITIONS: CONFETTI, WEB AUDIO FOCUS & INTERACTIVE WIDGETS
+   ========================================================================== */
+
+const AmbientAudio = {
+    ctx: null,
+    sources: {},
+    gains: {},
+    activeSound: null,
+    
+    init() {
+        if (this.ctx) return;
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) {
+            this.ctx = new AudioContext();
+        }
+    },
+    
+    play(type) {
+        this.init();
+        if (!this.ctx) return;
+        
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+        
+        this.stopAll();
+        
+        try {
+            if (type === "rain") {
+                this.playRain();
+            } else if (type === "wind") {
+                this.playWind();
+            } else if (type === "waves") {
+                this.playWaves();
+            }
+            this.activeSound = type;
+        } catch (e) {
+            console.error("Error playing soundscape:", e);
+        }
+    },
+    
+    stopAll() {
+        Object.keys(this.sources).forEach(key => {
+            try {
+                this.sources[key].stop();
+            } catch (e) {}
+            delete this.sources[key];
+        });
+        Object.keys(this.gains).forEach(key => {
+            try {
+                this.gains[key].disconnect();
+            } catch (e) {}
+            delete this.gains[key];
+        });
+        this.activeSound = null;
+    },
+    
+    playRain() {
+        const bufferSize = 2 * this.ctx.sampleRate;
+        const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+        
+        let lastOut = 0.0;
+        for (let i = 0; i < bufferSize; i++) {
+            const white = Math.random() * 2 - 1;
+            output[i] = (lastOut + (0.02 * white)) / 1.02;
+            lastOut = output[i];
+            output[i] *= 3.5;
+        }
+        
+        const whiteNoise = this.ctx.createBufferSource();
+        whiteNoise.buffer = noiseBuffer;
+        whiteNoise.loop = true;
+        
+        const lowpass = this.ctx.createBiquadFilter();
+        lowpass.type = 'lowpass';
+        lowpass.frequency.value = 600;
+        
+        const gainNode = this.ctx.createGain();
+        gainNode.gain.setValueAtTime(0.18, this.ctx.currentTime);
+        
+        whiteNoise.connect(lowpass);
+        lowpass.connect(gainNode);
+        gainNode.connect(this.ctx.destination);
+        
+        whiteNoise.start();
+        this.sources["rain"] = whiteNoise;
+        this.gains["rain"] = gainNode;
+    },
+    
+    playWind() {
+        const bufferSize = 2 * this.ctx.sampleRate;
+        const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+        
+        let b0 = 0.0, b1 = 0.0, b2 = 0.0, b3 = 0.0, b4 = 0.0, b5 = 0.0, b6 = 0.0;
+        for (let i = 0; i < bufferSize; i++) {
+            const white = Math.random() * 2 - 1;
+            b0 = 0.99886 * b0 + white * 0.0555179;
+            b1 = 0.99332 * b1 + white * 0.0750759;
+            b2 = 0.96900 * b2 + white * 0.1538520;
+            b3 = 0.86650 * b3 + white * 0.3104856;
+            b4 = 0.55000 * b4 + white * 0.5329522;
+            b5 = -0.7616 * b5 - white * 0.0168980;
+            output[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+            output[i] *= 0.11;
+            b6 = white * 0.115926;
+        }
+        
+        const pinkNoise = this.ctx.createBufferSource();
+        pinkNoise.buffer = noiseBuffer;
+        pinkNoise.loop = true;
+        
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = 400;
+        filter.Q.value = 2.0;
+        
+        const gainNode = this.ctx.createGain();
+        gainNode.gain.setValueAtTime(0.12, this.ctx.currentTime);
+        
+        pinkNoise.connect(filter);
+        filter.connect(gainNode);
+        gainNode.connect(this.ctx.destination);
+        
+        pinkNoise.start();
+        
+        const sweepWind = () => {
+            if (!this.sources["wind"]) return;
+            const targetFreq = 180 + Math.random() * 350;
+            const duration = 2 + Math.random() * 4;
+            filter.frequency.exponentialRampToValueAtTime(targetFreq, this.ctx.currentTime + duration);
+            setTimeout(sweepWind, duration * 1000);
+        };
+        sweepWind();
+        
+        this.sources["wind"] = pinkNoise;
+        this.gains["wind"] = gainNode;
+    },
+    
+    playWaves() {
+        const oscL = this.ctx.createOscillator();
+        oscL.type = 'sine';
+        oscL.frequency.value = 110; 
+        
+        const oscR = this.ctx.createOscillator();
+        oscR.type = 'sine';
+        oscR.frequency.value = 116;
+        
+        const gainNode = this.ctx.createGain();
+        gainNode.gain.setValueAtTime(0.06, this.ctx.currentTime);
+        
+        const pannerL = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : null;
+        const pannerR = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : null;
+        
+        if (pannerL && pannerR) {
+            pannerL.pan.value = -1;
+            pannerR.pan.value = 1;
+            oscL.connect(pannerL);
+            pannerL.connect(gainNode);
+            oscR.connect(pannerR);
+            pannerR.connect(gainNode);
+        } else {
+            oscL.connect(gainNode);
+            oscR.connect(gainNode);
+        }
+        
+        gainNode.connect(this.ctx.destination);
+        
+        oscL.start();
+        oscR.start();
+        
+        const gainMod = this.ctx.createOscillator();
+        gainMod.type = 'sine';
+        gainMod.frequency.value = 0.12;
+        const modGain = this.ctx.createGain();
+        modGain.gain.value = 0.03;
+        
+        gainMod.connect(modGain);
+        modGain.connect(gainNode.gain);
+        gainMod.start();
+        
+        this.sources["waves"] = oscL;
+        this.sources["waves_R"] = oscR;
+        this.sources["waves_mod"] = gainMod;
+        this.gains["waves"] = gainNode;
+    },
+    
+    playClick() {
+        if (!STATE.clickSoundEnabled) return;
+        this.init();
+        if (!this.ctx) return;
+        
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+        
+        try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            
+            // Organic warm wood block click synth:
+            // Sine wave sweeping down quickly from 1200Hz to 150Hz
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(1200, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(150, this.ctx.currentTime + 0.08);
+            
+            // Fast exponential decay envelope
+            gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.08);
+            
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.1);
+        } catch (e) {
+            console.error("Click audio error:", e);
+        }
+    },
+    
+    playFlip() {
+        if (!STATE.clickSoundEnabled) return;
+        this.init();
+        if (!this.ctx) return;
+        
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+        
+        try {
+            // Paper flip sound: filtered white noise envelope
+            const bufferSize = 0.25 * this.ctx.sampleRate; // 250ms duration
+            const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const output = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                output[i] = Math.random() * 2 - 1;
+            }
+            
+            const noiseSource = this.ctx.createBufferSource();
+            noiseSource.buffer = noiseBuffer;
+            
+            // Biquad Bandpass filter to isolate the paper rustling frequency
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.setValueAtTime(1500, this.ctx.currentTime);
+            filter.frequency.exponentialRampToValueAtTime(800, this.ctx.currentTime + 0.25);
+            filter.Q.value = 1.0;
+            
+            const gain = this.ctx.createGain();
+            gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.25);
+            
+            noiseSource.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.ctx.destination);
+            
+            noiseSource.start();
+            noiseSource.stop(this.ctx.currentTime + 0.28);
+        } catch (e) {
+            console.error("Flip audio error:", e);
+        }
+    }
+};
+
+const Confetti = {
+    canvas: null,
+    ctx: null,
+    particles: [],
+    timer: null,
+    colors: ['#0ea5a4', '#2563eb', '#a855f7', '#d97706', '#10b981', '#ef4444'],
+    
+    trigger(btnElement) {
+        if (this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
+        if (this.canvas) {
+            this.canvas.remove();
+        }
+        
+        this.canvas = document.createElement("canvas");
+        this.canvas.className = "confetti-canvas-overlay";
+        document.body.appendChild(this.canvas);
+        
+        this.ctx = this.canvas.getContext("2d");
+        this.resize();
+        
+        const rect = btnElement.getBoundingClientRect();
+        const originX = rect.left + rect.width / 2 + window.scrollX;
+        const originY = rect.top + window.scrollY;
+        
+        this.particles = [];
+        for (let i = 0; i < 80; i++) {
+            this.particles.push({
+                x: originX,
+                y: originY,
+                size: Math.random() * 8 + 4,
+                color: this.colors[Math.floor(Math.random() * this.colors.length)],
+                angle: Math.random() * Math.PI - Math.PI,
+                speed: Math.random() * 10 + 6,
+                gravity: 0.28,
+                drag: 0.98,
+                rotation: Math.random() * Math.PI,
+                rotationSpeed: Math.random() * 0.2 - 0.1
+            });
+        }
+        
+        const draw = () => {
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            let active = false;
+            
+            this.particles.forEach(p => {
+                p.speed *= p.drag;
+                p.x += Math.cos(p.angle) * p.speed;
+                p.y += Math.sin(p.angle) * p.speed + p.gravity;
+                p.gravity += 0.05;
+                p.rotation += p.rotationSpeed;
+                
+                if (p.y < this.canvas.height + window.scrollY + 50) {
+                    active = true;
+                }
+                
+                this.ctx.save();
+                this.ctx.translate(p.x - window.scrollX, p.y - window.scrollY);
+                this.ctx.rotate(p.rotation);
+                this.ctx.fillStyle = p.color;
+                this.ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+                this.ctx.restore();
+            });
+            
+            if (active) {
+                requestAnimationFrame(draw);
+            } else {
+                this.canvas.remove();
+                this.canvas = null;
+            }
+        };
+        draw();
+    },
+    
+    resize() {
+        if (!this.canvas) return;
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight;
+    }
+};
+window.addEventListener("resize", () => Confetti.resize());
+
+let autoScrollTimer = null;
+let autoScrollActive = false;
+
+function initAutoScroll() {
+    const playBtn = document.getElementById("zen-scroll-play");
+    const speedInput = document.getElementById("zen-scroll-speed");
+    
+    if (!playBtn || !speedInput) return;
+    
+    // Clear old listeners if any by recreating
+    const newPlayBtn = playBtn.cloneNode(true);
+    playBtn.parentNode.replaceChild(newPlayBtn, playBtn);
+    
+    newPlayBtn.addEventListener("click", () => {
+        if (autoScrollActive) {
+            stopAutoScroll();
+        } else {
+            startAutoScroll();
+        }
+    });
+    
+    speedInput.oninput = () => {
+        if (autoScrollActive) {
+            stopAutoScroll();
+            startAutoScroll();
+        }
+    };
+}
+
+function startAutoScroll() {
+    const playBtn = document.getElementById("zen-scroll-play");
+    const speedInput = document.getElementById("zen-scroll-speed");
+    if (!playBtn || !speedInput) return;
+    
+    autoScrollActive = true;
+    playBtn.classList.add("active");
+    playBtn.innerHTML = `<i data-lucide="pause"></i>`;
+    if (window.lucide) window.lucide.createIcons();
+    
+    const speed = parseInt(speedInput.value, 10);
+    const delay = Math.max(10, 110 - speed);
+    
+    autoScrollTimer = setInterval(() => {
+        window.scrollBy({ top: 1, behavior: "auto" });
+        if ((window.innerHeight + window.scrollY) >= document.documentElement.scrollHeight - 5) {
+            stopAutoScroll();
+        }
+    }, delay);
+}
+
+function stopAutoScroll() {
+    const playBtn = document.getElementById("zen-scroll-play");
+    if (!playBtn) return;
+    
+    autoScrollActive = false;
+    playBtn.classList.remove("active");
+    playBtn.innerHTML = `<i data-lucide="play"></i>`;
+    if (window.lucide) window.lucide.createIcons();
+    
+    if (autoScrollTimer) {
+        clearInterval(autoScrollTimer);
+        autoScrollTimer = null;
+    }
+}
+
+function initAiTabs() {
+    const summaryBtn = document.getElementById("tab-summary-btn");
+    const chatBtn = document.getElementById("tab-chat-btn");
+    const tabSummary = document.getElementById("ai-tab-summary");
+    const tabChat = document.getElementById("ai-tab-chat");
+    
+    if (!summaryBtn || !chatBtn || !tabSummary || !tabChat) return;
+    
+    summaryBtn.addEventListener("click", () => {
+        summaryBtn.classList.add("active");
+        chatBtn.classList.remove("active");
+        tabSummary.style.display = "block";
+        tabChat.style.display = "none";
+    });
+    
+    chatBtn.addEventListener("click", () => {
+        chatBtn.classList.add("active");
+        summaryBtn.classList.remove("active");
+        tabChat.style.display = "block";
+        tabSummary.style.display = "none";
+    });
+}
+
+function renderArticleInteractiveWidget(articleId) {
+    const wrapper = document.getElementById("article-interactive-widget-wrapper");
+    const container = document.getElementById("article-interactive-widget");
+    if (!wrapper || !container) return;
+    
+    wrapper.style.display = "block";
+    
+    if (articleId === "ai-business-future") {
+        container.innerHTML = `
+            <div class="comp-widget-grid">
+                <div class="comp-column traditional">
+                    <div class="comp-header">
+                        <i data-lucide="building"></i>
+                        <span>العمليات التقليدية</span>
+                    </div>
+                    <div class="comp-item">
+                        <span class="comp-item-label">سرعة معالجة الفواتير</span>
+                        <span class="comp-item-val">2.5 يوم</span>
+                    </div>
+                    <div class="comp-item">
+                        <span class="comp-item-label">سرعة اتخاذ القرار</span>
+                        <span class="comp-item-val">بطيء (أيام)</span>
+                    </div>
+                    <div class="comp-item">
+                        <span class="comp-item-label">تكلفة المهام الروتينية</span>
+                        <span class="comp-item-val" style="color: #ef4444;">100%</span>
+                    </div>
+                    <div class="comp-item">
+                        <span class="comp-item-label">نسبة الأخطاء البشرية</span>
+                        <span class="comp-item-val">8.2%</span>
+                    </div>
+                </div>
+                
+                <div class="comp-column ai-enhanced">
+                    <div class="comp-header">
+                        <i data-lucide="cpu"></i>
+                        <span>العمليات المدعومة بالذكاء الاصطناعي</span>
+                    </div>
+                    <div class="comp-item">
+                        <span class="comp-item-label">سرعة معالجة الفواتير</span>
+                        <span class="comp-item-val" id="comp-invoice-time">15 دقيقة <span class="comp-badge-down"><i data-lucide="arrow-down"></i> 99%</span></span>
+                    </div>
+                    <div class="comp-item">
+                        <span class="comp-item-label">سرعة اتخاذ القرار</span>
+                        <span class="comp-item-val" id="comp-decision-speed">فوري <span class="comp-badge-up"><i data-lucide="arrow-up"></i> 150%</span></span>
+                    </div>
+                    <div class="comp-item">
+                        <span class="comp-item-label">تكلفة المهام الروتينية</span>
+                        <span class="comp-item-val" id="comp-routing-cost">58% <span class="comp-badge-down"><i data-lucide="arrow-down"></i> 42%</span></span>
+                    </div>
+                    <div class="comp-item">
+                        <span class="comp-item-label">نسبة الأخطاء البشرية</span>
+                        <span class="comp-item-val" id="comp-error-rate">0.5% <span class="comp-badge-down"><i data-lucide="arrow-down"></i> 93%</span></span>
+                    </div>
+                </div>
+                
+                <div class="roi-input-group" style="grid-column: span 2; margin-top: 15px;">
+                    <label>
+                        <span>مستوى تبني الذكاء الاصطناعي في مؤسستك:</span>
+                        <span id="ai-adopt-label">100%</span>
+                    </label>
+                    <input type="range" class="roi-range-slider" id="ai-adopt-slider" min="10" max="100" value="100">
+                </div>
+                
+                <div class="comp-footer-banner" id="comp-banner-savings">
+                    تبني الذكاء الاصطناعي بالكامل يوفر ما يصل إلى 42% من التكاليف التشغيلية!
+                </div>
+            </div>
+        `;
+        
+        const slider = document.getElementById("ai-adopt-slider");
+        const label = document.getElementById("ai-adopt-label");
+        const invoiceTime = document.getElementById("comp-invoice-time");
+        const decisionSpeed = document.getElementById("comp-decision-speed");
+        const routingCost = document.getElementById("comp-routing-cost");
+        const errorRate = document.getElementById("comp-error-rate");
+        const bannerSavings = document.getElementById("comp-banner-savings");
+        
+        if (slider) {
+            slider.addEventListener("input", () => {
+                const val = parseInt(slider.value, 10);
+                label.textContent = `${val}%`;
+                
+                const savedCost = Math.round(val * 0.42);
+                const hrs = Math.round(60 - (val * 0.58));
+                invoiceTime.innerHTML = `${hrs} دقيقة <span class="comp-badge-down"><i data-lucide="arrow-down"></i> ${90 + Math.round(val * 0.09)}%</span>`;
+                decisionSpeed.innerHTML = `فوري <span class="comp-badge-up"><i data-lucide="arrow-up"></i> ${Math.round(val * 1.5)}%</span>`;
+                routingCost.innerHTML = `${100 - savedCost}% <span class="comp-badge-down"><i data-lucide="arrow-down"></i> ${savedCost}%</span>`;
+                
+                const err = (8.2 - (val * 0.077)).toFixed(1);
+                errorRate.innerHTML = `${err}% <span class="comp-badge-down"><i data-lucide="arrow-down"></i> ${Math.round(val * 0.93)}%</span>`;
+                
+                bannerSavings.textContent = `تبني الذكاء الاصطناعي بنسبة ${val}% يوفر ما يصل إلى ${savedCost}% من التكاليف التشغيلية!`;
+                
+                if (window.lucide) window.lucide.createIcons();
+            });
+        }
+    } 
+    else if (articleId === "ai-productivity-tools") {
+        container.innerHTML = `
+            <div class="roi-calculator-container">
+                <div class="roi-inputs">
+                    <div class="roi-input-group">
+                        <label>
+                            <span>كتابة الرسائل والمحتوى (ساعة/أسبوع):</span>
+                            <span id="roi-writing-val">10 ساعات</span>
+                        </label>
+                        <input type="range" class="roi-range-slider" id="roi-writing-slider" min="0" max="25" value="10">
+                    </div>
+                    <div class="roi-input-group">
+                        <label>
+                            <span>تنظيم الاجتماعات ومحاضرها (ساعة/أسبوع):</span>
+                            <span id="roi-meeting-val">6 ساعات</span>
+                        </label>
+                        <input type="range" class="roi-range-slider" id="roi-meeting-slider" min="0" max="15" value="6">
+                    </div>
+                    <div class="roi-input-group">
+                        <label>
+                            <span>إدارة المهام والجدولة (ساعة/أسبوع):</span>
+                            <span id="roi-task-val">4 ساعات</span>
+                        </label>
+                        <input type="range" class="roi-range-slider" id="roi-task-slider" min="0" max="10" value="4">
+                    </div>
+                </div>
+                
+                <div class="roi-results-card">
+                    <div class="roi-gauge-wrapper">
+                        <svg class="roi-gauge-svg" width="160" height="160">
+                            <circle class="roi-gauge-track" cx="80" cy="80" r="70"></circle>
+                            <circle class="roi-gauge-fill" id="roi-gauge-fill" cx="80" cy="80" r="70"></circle>
+                        </svg>
+                        <div class="roi-gauge-text">
+                            <span class="roi-gauge-percentage" id="roi-time-saved-val">0</span>
+                            <span class="roi-gauge-label">ساعة توفير/أسبوع</span>
+                        </div>
+                    </div>
+                    
+                    <div class="roi-savings-row">
+                        <div class="roi-stat">
+                            <span class="roi-stat-val" id="roi-cost-saved">0</span>
+                            <span class="roi-stat-lbl">وفر مالي سنوي (ريال)</span>
+                        </div>
+                        <div class="roi-stat">
+                            <span class="roi-stat-val" id="roi-days-saved">0</span>
+                            <span class="roi-stat-lbl">أيام عمل موفرة/سنة</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        const writingSlider = document.getElementById("roi-writing-slider");
+        const meetingSlider = document.getElementById("roi-meeting-slider");
+        const taskSlider = document.getElementById("roi-task-slider");
+        
+        const writingVal = document.getElementById("roi-writing-val");
+        const meetingVal = document.getElementById("roi-meeting-val");
+        const taskVal = document.getElementById("roi-task-val");
+        
+        const timeSavedVal = document.getElementById("roi-time-saved-val");
+        const costSaved = document.getElementById("roi-cost-saved");
+        const daysSaved = document.getElementById("roi-days-saved");
+        const gaugeFill = document.getElementById("roi-gauge-fill");
+        
+        const calculateROI = () => {
+            const wHrs = parseInt(writingSlider.value, 10);
+            const mHrs = parseInt(meetingSlider.value, 10);
+            const tHrs = parseInt(taskSlider.value, 10);
+            
+            writingVal.textContent = `${wHrs} ${wHrs > 10 ? 'ساعة' : 'ساعات'}`;
+            meetingVal.textContent = `${mHrs} ${mHrs > 10 ? 'ساعة' : 'ساعات'}`;
+            taskVal.textContent = `${tHrs} ${tHrs > 10 ? 'ساعة' : 'ساعات'}`;
+            
+            const savedWeekly = (wHrs * 0.6) + (mHrs * 0.5) + (tHrs * 0.4);
+            const savedWeeklyRounded = parseFloat(savedWeekly.toFixed(1));
+            timeSavedVal.textContent = savedWeeklyRounded;
+            
+            const savedYearlyCost = Math.round(savedWeekly * 90 * 52);
+            costSaved.textContent = savedYearlyCost.toLocaleString();
+            
+            const savedYearlyDays = Math.round((savedWeekly * 52) / 8);
+            daysSaved.textContent = savedYearlyDays;
+            
+            const maxSave = 25;
+            const percent = Math.min(100, (savedWeekly / maxSave) * 100);
+            const offset = 440 - (440 * percent) / 100;
+            gaugeFill.style.strokeDashoffset = offset;
+        };
+        
+        [writingSlider, meetingSlider, taskSlider].forEach(slider => {
+            slider.addEventListener("input", calculateROI);
+        });
+        
+        calculateROI();
+    } 
+    else if (articleId === "business-automation-efficiency") {
+        container.innerHTML = `
+            <div class="node-simulator-container">
+                <div class="node-canvas-wrapper">
+                    <svg class="node-svg-lines">
+                        <path class="node-connection-path" id="conn-line-1" d="M 0 0 L 0 0"></path>
+                        <path class="node-connection-path" id="conn-line-2" d="M 0 0 L 0 0"></path>
+                    </svg>
+                    
+                    <div class="node-element" id="node-1">
+                        <div class="node-icon"><i data-lucide="users"></i></div>
+                        <div class="node-text">
+                            <span class="node-title">عميل جديد</span>
+                            <span class="node-subtitle">Trigger: موقع الويب</span>
+                        </div>
+                        <div class="node-status-dot"></div>
+                    </div>
+                    
+                    <div class="node-element" id="node-2">
+                        <div class="node-icon"><i data-lucide="message-circle"></i></div>
+                        <div class="node-text">
+                            <span class="node-title">رسالة واتساب</span>
+                            <span class="node-subtitle">Action: ترحيب فوري</span>
+                        </div>
+                        <div class="node-status-dot"></div>
+                    </div>
+                    
+                    <div class="node-element" id="node-3">
+                        <div class="node-icon"><i data-lucide="database"></i></div>
+                        <div class="node-text">
+                            <span class="node-title">تحديث CRM</span>
+                            <span class="node-subtitle">Action: سجل المبيعات</span>
+                        </div>
+                        <div class="node-status-dot"></div>
+                    </div>
+                </div>
+                
+                <div class="node-sim-button-row">
+                    <button class="node-sim-btn" id="node-sim-start-btn">
+                        <i data-lucide="play-circle"></i>
+                        <span>تشغيل المحاكاة التفاعلية</span>
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        const simBtn = document.getElementById("node-sim-start-btn");
+        const node1 = document.getElementById("node-1");
+        const node2 = document.getElementById("node-2");
+        const node3 = document.getElementById("node-3");
+        
+        const conn1 = document.getElementById("conn-line-1");
+        const conn2 = document.getElementById("conn-line-2");
+        
+        const drawConnections = () => {
+            if (!node1 || !node2 || !node3 || !conn1 || !conn2) return;
+            const canvasWrapper = document.querySelector(".node-canvas-wrapper");
+            if (!canvasWrapper) return;
+            
+            const canvasRect = canvasWrapper.getBoundingClientRect();
+            
+            const r1 = node1.getBoundingClientRect();
+            const r2 = node2.getBoundingClientRect();
+            const r3 = node3.getBoundingClientRect();
+            
+            const x1_start = r1.right - canvasRect.left;
+            const y1_start = r1.top + r1.height / 2 - canvasRect.top;
+            const x1_end = r2.left - canvasRect.left;
+            const y1_end = r2.top + r2.height / 2 - canvasRect.top;
+            
+            const x2_start = r2.right - canvasRect.left;
+            const y2_start = r2.top + r2.height / 2 - canvasRect.top;
+            const x2_end = r3.left - canvasRect.left;
+            const y2_end = r3.top + r3.height / 2 - canvasRect.top;
+            
+            conn1.setAttribute("d", `M ${x1_start} ${y1_start} L ${x1_end} ${y1_end}`);
+            conn2.setAttribute("d", `M ${x2_start} ${y2_start} L ${x2_end} ${y2_end}`);
+        };
+        
+        setTimeout(drawConnections, 100);
+        window.addEventListener("resize", drawConnections);
+        
+        if (simBtn) {
+            simBtn.addEventListener("click", () => {
+                simBtn.disabled = true;
+                simBtn.innerHTML = `<i data-lucide="loader-2" class="animate-spin"></i> <span>جاري تشغيل الأتمتة...</span>`;
+                if (window.lucide) window.lucide.createIcons();
+                
+                [node1, node2, node3].forEach(n => n.classList.remove("active", "pulse-trigger"));
+                [conn1, conn2].forEach(c => c.classList.remove("active"));
+                
+                node1.classList.add("active", "pulse-trigger");
+                showToast("تلقي إشارة Trigger: عميل جديد!", "info");
+                
+                setTimeout(() => {
+                    conn1.classList.add("active");
+                    
+                    setTimeout(() => {
+                        node2.classList.add("active", "pulse-trigger");
+                        showToast("تنفيذ إجراء: إرسال ترحيب عبر واتساب!", "message-circle");
+                        
+                        setTimeout(() => {
+                            conn2.classList.add("active");
+                            
+                            setTimeout(() => {
+                                node3.classList.add("active", "pulse-trigger");
+                                showToast("تنفيذ إجراء: تحديث سجلات CRM بنجاح!", "database");
+                                
+                                setTimeout(() => {
+                                    showToast("اكتمل تشغيل الأتمتة! تم توفير 4 دقائق عمل.", "check-circle");
+                                    simBtn.disabled = false;
+                                    simBtn.innerHTML = `<i data-lucide="rotate-ccw"></i> <span>إعادة التشغيل</span>`;
+                                    if (window.lucide) window.lucide.createIcons();
+                                }, 1000);
+                            }, 1000);
+                        }, 500);
+                    }, 1000);
+                }, 800);
+            });
+        }
+    } 
+    else if (articleId === "future-tech-generative-ai") {
+        container.innerHTML = `
+            <div class="sandbox-playground">
+                <div class="sandbox-controls">
+                    <span class="sandbox-select-label">اختر نموذجاً برمجياً توليدياً:</span>
+                    <div class="sandbox-presets">
+                        <button class="sandbox-preset-btn active" data-preset="card">
+                            <span>بطاقة متألقة مع هالة مضيئة</span>
+                            <i data-lucide="credit-card"></i>
+                        </button>
+                        <button class="sandbox-preset-btn" data-preset="button">
+                            <span>زر نيون متألق تفاعلي</span>
+                            <i data-lucide="toggle-left"></i>
+                        </button>
+                        <button class="sandbox-preset-btn" data-preset="text">
+                            <span>نص متدرج ومتحرك</span>
+                            <i data-lucide="type"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="sandbox-custom-input-group">
+                        <label class="sandbox-select-label">أو اكتب طلباً مخصصاً بالعربية:</label>
+                        <div class="sandbox-custom-row">
+                            <input type="text" id="sandbox-prompt-input" placeholder="مثال: بطاقة داكنة مع زر متوهج..." value="بطاقة متألقة مع هالة مضيئة">
+                            <button id="sandbox-generate-btn">
+                                <i data-lucide="wand-2"></i>
+                                <span>توليد</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="sandbox-preview-panel">
+                    <div class="sandbox-preview-header">
+                        <div class="sandbox-preview-dots">
+                            <div class="sandbox-dot red"></div>
+                            <div class="sandbox-dot yellow"></div>
+                            <div class="sandbox-dot green"></div>
+                        </div>
+                        <span class="sandbox-preview-title"><i data-lucide="eye"></i> المعاينة المباشرة (Live Output)</span>
+                    </div>
+                    <div class="sandbox-preview-content" id="sandbox-live-output">
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        const presets = container.querySelectorAll(".sandbox-preset-btn");
+        const promptInput = document.getElementById("sandbox-prompt-input");
+        const generateBtn = document.getElementById("sandbox-generate-btn");
+        const outputBox = document.getElementById("sandbox-live-output");
+        
+        const presetCode = {
+            card: `
+                <div style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); padding: 25px; border-radius: 20px; text-align: center; backdrop-filter: blur(10px); box-shadow: 0 15px 35px rgba(0,0,0,0.2), 0 0 30px rgba(217,119,6,0.15); max-width:260px; color:#ffffff; font-family:'Outfit', sans-serif;">
+                    <h3 style="margin-bottom:8px; font-weight:700; color:#d97706; font-size:1.2rem;">توليد ذكي</h3>
+                    <p style="font-size:0.9rem; opacity:0.8; line-height:1.5;">هذا العنصر تم تصميمه وكتابة كوده بواسطة الذكاء الاصطناعي التوليدي.</p>
+                </div>
+            `,
+            button: `
+                <button style="background: #000; color: #d97706; border: 2px solid #d97706; padding: 14px 28px; border-radius: 50px; font-weight: bold; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 0 15px rgba(217,119,6,0.4); text-transform: uppercase; font-family:'Outfit', sans-serif;" onmouseover="this.style.background='#d97706'; this.style.color='#000'; this.style.boxShadow='0 0 25px #d97706'" onmouseout="this.style.background='#000'; this.style.color='#d97706'; this.style.boxShadow='0 0 15px rgba(217,119,6,0.4)'">
+                    اضغط هنا
+                </button>
+            `,
+            text: `
+                <h2 style="font-size: 2.2rem; font-weight: 800; background: linear-gradient(120deg, #d97706, #a855f7, #0ea5a4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-align:center; font-family:'Outfit', sans-serif;">
+                    مستقبل البرمجة
+                </h2>
+            `
+        };
+        
+        const renderOutput = (key) => {
+            outputBox.innerHTML = `
+                <div class="ai-typing-cursor" style="font-family:'Outfit', sans-serif; font-size:0.95rem; color:var(--text-secondary);">
+                    جاري كتابة شيفرة HTML/CSS التوليدية...
+                </div>
+            `;
+            
+            setTimeout(() => {
+                outputBox.innerHTML = presetCode[key];
+            }, 1000);
+        };
+        
+        renderOutput("card");
+        
+        presets.forEach(btn => {
+            btn.addEventListener("click", () => {
+                presets.forEach(b => b.classList.remove("active"));
+                btn.classList.add("active");
+                
+                const presetKey = btn.getAttribute("data-preset");
+                promptInput.value = btn.querySelector("span").textContent;
+                renderOutput(presetKey);
+            });
+        });
+        
+        if (generateBtn) {
+            generateBtn.addEventListener("click", () => {
+                const text = promptInput.value.trim().toLowerCase();
+                let chosenKey = "card";
+                if (text.includes("زر") || text.includes("button")) chosenKey = "button";
+                else if (text.includes("نص") || text.includes("gradient") || text.includes("text")) chosenKey = "text";
+                
+                presets.forEach(b => {
+                    if (b.getAttribute("data-preset") === chosenKey) b.classList.add("active");
+                    else b.classList.remove("active");
+                });
+                
+                renderOutput(chosenKey);
+            });
+        }
+    }
+    
+    if (window.lucide) window.lucide.createIcons();
+}
+
+const AIChatCompanion = {
+    database: {
+        "ai-business-future": {
+            suggestions: [
+                "ما هو جوهر تغيير الذكاء الاصطناعي للأعمال؟",
+                "كيف يؤثر الذكاء الاصطناعي على الكفاءة التشغيلية؟",
+                "ما هي أهم 3 نصائح للشركات للانتقال؟"
+            ],
+            responses: {
+                "ما هو جوهر تغيير الذكاء الاصطناعي للأعمال؟": "جوهر هذا التحول يكمن في دمج الذكاء الاصطناعي في صميم سلاسل القيمة وليس مجرد كأداة إضافية. يتيح ذلك تحليلاً فوريًا للبيانات الضخمة وتنبؤات استراتيجية دقيقة تساهم في تسريع اتخاذ القرار بنسبة تصل إلى 40%.",
+                "كيف يؤثر الذكاء الاصطناعي على الكفاءة التشغيلية؟": "يساهم الذكاء الاصطناعي في أتمتة المهام المتكررة، مما يوفر حوالي 30% من وقت الموظفين للتركيز على المهام الاستراتيجية والإبداعية، وبالتالي يرفع مستوى الكفاءة ويقلل الأخطاء البشرية بنسبة كبيرة.",
+                "ما هي أهم 3 نصائح للشركات للانتقال؟": "الخطوات الأساسية هي: أولاً، تدريب وتطوير الكفاءات البشرية؛ ثانياً، البدء بأتمتة العمليات الأكثر استهلاكاً للوقت؛ وثالثاً، بناء نظام مرن لإدارة وتكامل البيانات داخل المؤسسة."
+            },
+            defaultResponse: "مستقبل الأعمال يعتمد بشكل جذري على دمج الذكاء الاصطناعي. هذا المقال يركز على الكفاءة التشغيلية ومستويات الإنتاجية المعززة بالآلات الذكية وكيفية صياغة خطط استراتيجية مرنة."
+        },
+        "ai-productivity-tools": {
+            suggestions: [
+                "ما هي أفضل أداة لتنظيم المهام؟",
+                "كيف يوفر الذكاء الاصطناعي الوقت في كتابة البريد؟",
+                "ما هي الأدوات الموصى بها لتوليد الأفكار؟"
+            ],
+            responses: {
+                "ما هي أفضل أداة لتنظيم المهام؟": "أداة Notion AI و ClickUp Brain تعتبران الأبرز في تنظيم المهام وأتمتة كتابة الملاحظات ومحاضر الاجتماعات وتوليد خطط العمل الذكية بشكل فوري.",
+                "كيف يوفر الذكاء الاصطناعي الوقت في كتابة البريد؟": "عبر استخدام أدوات مثل ChatGPT أو Copilot لإنشاء مسودات البريد الإلكتروني، وتلخيص سلاسل الرسائل الطويلة. هذا يوفر للمستخدم المتوسط ما يقارب 5 ساعات أسبوعياً كان يقضيها في التصفح والكتابة.",
+                "ما هي الأدوات الموصى بها لتوليد الأفكار؟": "لعل أداة Claude 3.5 Sonnet وتطبيقات التفكير البصري مثل Miro Assist هي الأفضل في العصف الذهني وتوليد الأفكار وهيكلتها بطريقة منطقية ومقنعة."
+            },
+            defaultResponse: "الأدوات العشرة المذكورة في المقال تغطي أتمتة الكتابة والتنظيم والبرمجة وتحليل البيانات لرفع الإنتاجية الشخصية والمؤسسية."
+        },
+        "business-automation-efficiency": {
+            suggestions: [
+                "كيف أبدأ أتمتة شركتي بدون ميزانية ضخمة؟",
+                "ما هي الأدوات المناسبة للربط بين التطبيقات؟",
+                "كيف تؤثر الأتمتة على علاقات العملاء؟"
+            ],
+            responses: {
+                "كيف أبدأ أتمتة شركتي بدون ميزانية ضخمة؟": "يمكنك البدء مجانًا باستخدام أدوات مثل Make أو Zapier للربط التلقائي بين بريدك الإلكتروني وجداول بيانات Google. ابدأ بأبسط عملية مثل نقل بيانات العملاء الجدد تلقائيًا.",
+                "ما هي الأدوات المناسبة للربط بين التطبيقات؟": "أدوات الربط (No-code Integration) الأقوى هي Zapier (لسهولة الاستخدام) و Make (للمسارات المعقدة والمتعددة الخطوات والتكلفة الأقل)، و activepieces كبديل مفتوح المصدر.",
+                "كيف تؤثر الأتمتة على علاقات العملاء؟": "الأتمتة تنقذ خدمة العملاء عبر الرد الفوري المبرمج. حيث يتم إرسال رسائل تأكيد فورية أو إجابات عن الأسئلة الشائعة، مما يرفع تقييم رضا العملاء بنسبة 25% مع تخفيف العبء عن فريق الدعم."
+            },
+            defaultResponse: "تعتمد الأتمتة على بناء تدفقات عمل رقمية تلغي التدخل البشري في إدخال البيانات المكرر، مما يوفر وقتاً قيماً ويزيد من سرعة استجابة المشاريع."
+        },
+        "future-tech-generative-ai": {
+            suggestions: [
+                "هل سيلغي الذكاء الاصطناعي وظيفة المبرمج؟",
+                "كيف يستفيد المبرمج اليوم من أدوات الذكاء الاصطناعي؟",
+                "ما هي أهم المهارات للمطورين في عصر الذكاء الاصطناعي؟"
+            ],
+            responses: {
+                "هل سيلغي الذكاء الاصطناعي وظيفة المبرمج؟": "لا، لن يلغي وظيفة المبرمج، بل سيعيد تعريفها. سيتحول المبرمج من كاتب للأكواد (Coder) إلى مهندس حلول ومصمم معماري للنظم (Software Architect) يشرف على توجيه نماذج الذكاء الاصطناعي.",
+                "كيف يستفيد المبرمج اليوم من أدوات الذكاء الاصطناعي؟": "يستفيد المطورون عبر تسريع كتابة الأكواد الروتينية، والبحث السريع عن الثغرات، وتوليد اختبارات الوحدة (Unit Tests)، وتوثيق الشيفرة البرمجية بشكل تلقائي، مما يضاعف سرعة التطوير بمرتين.",
+                "ما هي أهم المهارات للمطورين في عصر الذكاء الاصطناعي؟": "المهارات الحاسمة هي: صياغة الأوامر وهندسة الأوامر (Prompt Engineering)، فهم معمارية البرمجيات، حل المشكلات المعقدة، والقدرة على مراجعة وفحص وتصحيح الأكواد المولدة بواسطة الذكاء الاصطناعي."
+            },
+            defaultResponse: "الذكاء الاصطناعي التوليدي يعزز سرعة كتابة الشيفرات بشكل هائل. يجب على المبرمجين التكيف كمهندسي نظم يوجهون الآلة بدلاً من كتابة كود مكرر يدوياً."
+        }
+    },
+    
+    currentArticleId: null,
+    
+    init(articleId) {
+        this.currentArticleId = articleId;
+        
+        const messagesBox = document.getElementById("ai-chat-messages-box");
+        if (messagesBox) {
+            messagesBox.innerHTML = `
+                <div class="chat-message bot-message">
+                    <div class="chat-avatar"><i data-lucide="bot"></i></div>
+                    <div class="chat-text">أهلاً بك! أنا مساعد سرد الذكي، يمكنك سؤالي حول محتوى هذا المقال أو اختيار أحد الأسئلة المقترحة بالأسفل.</div>
+                </div>
+            `;
+        }
+        
+        const suggestionsBox = document.getElementById("ai-chat-suggestions-box");
+        const articleData = this.database[articleId];
+        if (suggestionsBox && articleData) {
+            suggestionsBox.innerHTML = articleData.suggestions.map(q => {
+                return `<button class="suggestion-chip">${q}</button>`;
+            }).join("");
+            
+            suggestionsBox.querySelectorAll(".suggestion-chip").forEach(chip => {
+                chip.addEventListener("click", () => {
+                    this.askQuestion(chip.textContent);
+                });
+            });
+        }
+        
+        const sendBtn = document.getElementById("ai-chat-send-btn");
+        const userInput = document.getElementById("ai-chat-user-input");
+        
+        if (sendBtn && userInput) {
+            const newSendBtn = sendBtn.cloneNode(true);
+            sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
+            
+            const handleSend = () => {
+                const text = userInput.value.trim();
+                if (text) {
+                    this.askQuestion(text);
+                    userInput.value = "";
+                }
+            };
+            
+            newSendBtn.addEventListener("click", handleSend);
+            userInput.onkeypress = (e) => {
+                if (e.key === "Enter") {
+                    handleSend();
+                }
+            };
+        }
+        
+        if (window.lucide) window.lucide.createIcons();
+    },
+    
+    askQuestion(text) {
+        const messagesBox = document.getElementById("ai-chat-messages-box");
+        if (!messagesBox) return;
+        
+        const userMsg = document.createElement("div");
+        userMsg.className = "chat-message user-message";
+        userMsg.innerHTML = `
+            <div class="chat-avatar"><i data-lucide="user"></i></div>
+            <div class="chat-text">${text}</div>
+        `;
+        messagesBox.appendChild(userMsg);
+        messagesBox.scrollTop = messagesBox.scrollHeight;
+        
+        const botLoading = document.createElement("div");
+        botLoading.className = "chat-message bot-message bot-loading-bubble";
+        botLoading.innerHTML = `
+            <div class="chat-avatar"><i data-lucide="bot"></i></div>
+            <div class="chat-text"><i data-lucide="loader-2" class="animate-spin" style="width:14px; height:14px;"></i> جاري التفكير وصياغة الإجابة...</div>
+        `;
+        messagesBox.appendChild(botLoading);
+        messagesBox.scrollTop = messagesBox.scrollHeight;
+        if (window.lucide) window.lucide.createIcons();
+        
+        const articleData = this.database[this.currentArticleId];
+        let answer = articleData ? articleData.defaultResponse : "عذراً، لم أتمكن من العثور على المقال.";
+        
+        if (articleData && articleData.responses[text]) {
+            answer = articleData.responses[text];
+        }
+        
+        setTimeout(() => {
+            botLoading.remove();
+            
+            const botMsg = document.createElement("div");
+            botMsg.className = "chat-message bot-message";
+            botMsg.innerHTML = `
+                <div class="chat-avatar"><i data-lucide="bot"></i></div>
+                <div class="chat-text"></div>
+            `;
+            messagesBox.appendChild(botMsg);
+            
+            let index = 0;
+            const textContainer = botMsg.querySelector(".chat-text");
+            const interval = setInterval(() => {
+                if (index < answer.length) {
+                    textContainer.textContent += answer.charAt(index);
+                    index++;
+                    messagesBox.scrollTop = messagesBox.scrollHeight;
+                } else {
+                    clearInterval(interval);
+                }
+            }, 15);
+            
+            if (window.lucide) window.lucide.createIcons();
+        }, 1200);
+    }
+};
