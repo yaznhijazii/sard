@@ -214,10 +214,19 @@ input {
 .brand-logo {
     display: flex;
     align-items: center;
-    gap: 10px;
-    font-weight: 800;
-    font-size: 1.8rem;
-    color: var(--text-primary);
+    gap: 0;
+    padding: 4px 0;
+}
+
+.brand-logo-img {
+    height: 38px;
+    width: auto;
+    object-fit: contain;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.brand-logo:hover .brand-logo-img {
+    transform: scale(1.05);
 }
 
 .logo-dot {
@@ -3878,12 +3887,11 @@ body.zen-mode-active .article-reader-back-bar:hover {
     animation: preloaderDotPulse 1.6s infinite ease-in-out;
 }
 
-.preloader-logo {
-    font-size: 3.5rem;
-    font-weight: 900;
-    color: var(--text-primary);
-    letter-spacing: 0.15rem;
-    animation: preloaderTextGlow 1.6s infinite ease-in-out;
+.preloader-logo-img {
+    height: 80px;
+    width: auto;
+    object-fit: contain;
+    animation: preloaderLogoGlow 2.2s infinite ease-in-out;
 }
 
 .preloader-line {
@@ -3902,9 +3910,9 @@ body.zen-mode-active .article-reader-back-bar:hover {
     50% { transform: scale(1.4); opacity: 1; }
 }
 
-@keyframes preloaderTextGlow {
-    0%, 100% { opacity: 0.8; letter-spacing: 0.1rem; }
-    50% { opacity: 1; letter-spacing: 0.25rem; }
+@keyframes preloaderLogoGlow {
+    0%, 100% { opacity: 0.85; transform: scale(1); filter: drop-shadow(0 0 2px rgba(14, 165, 164, 0.15)); }
+    50% { opacity: 1; transform: scale(1.04); filter: drop-shadow(0 0 16px rgba(14, 165, 164, 0.45)); }
 }
 
 @keyframes preloaderLineFill {
