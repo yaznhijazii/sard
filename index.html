@@ -49,6 +49,9 @@
     <div class="ambient-glow-blob blob-2"></div>
     <div class="ambient-glow-blob blob-3"></div>
 
+    <!-- Interactive Neural Network Particle Canvas -->
+    <canvas id="ambient-particle-canvas"></canvas>
+
     <!-- Scroll Progress Indicator -->
     <div class="scroll-progress-container">
         <div class="scroll-progress-bar" id="scroll-progress-bar"></div>
@@ -247,7 +250,7 @@
                 <section class="ai-summary-box-wrapper" id="ai-summary-box-wrapper">
                     <div class="ai-summary-tabs">
                         <button class="ai-summary-tab-btn active" id="tab-summary-btn" data-tab="summary">
-                            <i data-lucide="sparkles"></i>
+                            <i data-lucide="scan-text"></i>
                             <span>ملخص المقال</span>
                         </button>
                         <button class="ai-summary-tab-btn" id="tab-chat-btn" data-tab="chat">
@@ -263,7 +266,7 @@
                             </div>
                             <button class="ai-summary-btn" id="generate-ai-summary-btn">
                                 <span>توليد الملخص الآن</span>
-                                <i data-lucide="wand-2"></i>
+                                <i data-lucide="cpu"></i>
                             </button>
                         </div>
                         <div class="ai-summary-box-content collapse-summary" id="ai-summary-content">
@@ -275,7 +278,7 @@
                         <div class="ai-chat-container">
                             <div class="ai-chat-messages" id="ai-chat-messages-box">
                                 <div class="chat-message bot-message">
-                                    <div class="chat-avatar"><i data-lucide="bot"></i></div>
+                                    <div class="chat-avatar"><i data-lucide="brain"></i></div>
                                     <div class="chat-text">أهلاً بك! أنا مساعد سرد الذكي، يمكنك سؤالي حول محتوى هذا المقال أو اختيار أحد الأسئلة المقترحة بالأسفل.</div>
                                 </div>
                             </div>
@@ -302,7 +305,7 @@
                 <section class="interactive-widget-section" id="article-interactive-widget-wrapper" style="display:none;">
                     <div class="widget-header-editorial">
                         <div class="widget-label-container">
-                            <i data-lucide="sparkles" class="widget-sparkle"></i>
+                            <i data-lucide="puzzle" class="widget-sparkle"></i>
                             <span class="widget-label">ملحق تفاعلي تجريبي</span>
                         </div>
                         <div class="widget-header-line"></div>
@@ -518,23 +521,37 @@
             </div>
             <div class="zen-menu-separator"></div>
             <div class="zen-soundscape-container">
-                <span class="zen-menu-section-title"><i data-lucide="music-4"></i> صوتيات التركيز</span>
+                <span class="zen-menu-section-title"><i data-lucide="headphones"></i> صوتيات التركيز</span>
                 <div class="zen-sound-buttons">
-                    <button class="zen-sound-btn" data-sound="rain" title="مطر هادئ"><i data-lucide="cloud-rain"></i></button>
-                    <button class="zen-sound-btn" data-sound="wind" title="رياح هادئة"><i data-lucide="wind"></i></button>
-                    <button class="zen-sound-btn" data-sound="waves" title="موجات التركيز"><i data-lucide="waves"></i></button>
+                    <button class="zen-sound-btn" data-sound="rain" title="مطر هادئ"><i data-lucide="droplets"></i></button>
+                    <button class="zen-sound-btn" data-sound="wind" title="رياح هادئة"><i data-lucide="fan"></i></button>
+                    <button class="zen-sound-btn" data-sound="waves" title="موجات التركيز"><i data-lucide="radio"></i></button>
                     <button class="zen-sound-btn" id="zen-sound-mute" title="كتم الصوت"><i data-lucide="volume-x"></i></button>
                 </div>
             </div>
             <div class="zen-menu-separator"></div>
             <div class="zen-scroll-container">
-                <span class="zen-menu-section-title"><i data-lucide="chevrons-down"></i> القراءة التلقائية</span>
+                <span class="zen-menu-section-title"><i data-lucide="scroll-text"></i> القراءة التلقائية</span>
                 <div class="zen-scroll-controls">
                     <button class="zen-scroll-btn" id="zen-scroll-play" title="تشغيل التمرير التلقائي"><i data-lucide="play"></i></button>
                     <input type="range" id="zen-scroll-speed" min="10" max="80" value="30" title="سرعة التمرير">
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Zen Mode Reading Progress Ring -->
+    <div class="zen-progress-ring-container" id="zen-progress-ring-container">
+        <svg class="zen-progress-ring-svg">
+            <circle class="zen-progress-ring-track" cx="22" cy="22" r="20"></circle>
+            <circle class="zen-progress-ring-fill" id="zen-progress-ring-fill" cx="22" cy="22" r="20"></circle>
+        </svg>
+        <span class="zen-progress-ring-text" id="zen-progress-ring-text">0%</span>
+    </div>
+
+    <!-- Zen Mode Waveform Audio Visualizer -->
+    <div class="zen-waveform-container" id="zen-waveform-container">
+        <canvas id="zen-waveform-canvas"></canvas>
     </div>
 
     <!-- Ultra-Premium Spotlight Search Modal -->
@@ -554,7 +571,7 @@
                 </div>
                 <div class="spotlight-results" id="spotlight-results-container">
                     <div class="spotlight-empty-state">
-                        <i data-lucide="sparkles"></i>
+                        <i data-lucide="scan-text"></i>
                         <p>ابدأ كتابة عنوان المقال أو الموضوع للبحث الفوري...</p>
                         <span>تلميحة: اضغط على <kbd>Ctrl</kbd> + <kbd>K</kbd> في أي وقت لفتح محرك البحث السريع!</span>
                     </div>

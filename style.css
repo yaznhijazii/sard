@@ -2513,7 +2513,6 @@ input {
 }
 
 /* Zen Active mode settings */
-body.zen-mode-active .main-header,
 body.zen-mode-active footer,
 body.zen-mode-active .hero-section,
 body.zen-mode-active .filter-container,
@@ -2523,6 +2522,17 @@ body.zen-mode-active .related-articles-section {
     opacity: 0 !important;
     pointer-events: none !important;
     transition: opacity 0.5s ease;
+}
+
+body.zen-mode-active .main-header {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.5s ease;
+}
+
+body.zen-mode-active .main-header:hover {
+    opacity: 1;
+    pointer-events: auto;
 }
 
 body.zen-mode-active .view-article-detail {
@@ -2550,7 +2560,7 @@ body.zen-mode-active .detail-hero-graphic {
     bottom: 0;
     background: rgba(11, 12, 14, 0.3);
     backdrop-filter: blur(8px);
-    z-index: 1000;
+    z-index: 1050;
     opacity: 0;
     pointer-events: none;
     display: flex;
@@ -4020,5 +4030,178 @@ body.zen-mode-active .article-reader-back-bar:hover {
     background: var(--border-color);
     margin: 15px 10px;
 }
+
+/* ==========================================================================
+   UI/UX UPGRADES: NEURAL PARTICLES, IMERSIVE ZEN MODE, SPOTLIGHT SEARCH
+   ========================================================================== */
+
+#ambient-particle-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: -2;
+    pointer-events: none;
+    transition: opacity 0.5s ease;
+}
+
+/* Zen Breathing Background */
+body.zen-mode-active {
+    background-color: var(--bg-primary) !important;
+    position: relative;
+    overflow-x: hidden;
+}
+
+body.zen-mode-active::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at 20% 20%, rgba(14, 165, 164, 0.04) 0%, transparent 60%),
+                radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.03) 0%, transparent 60%);
+    z-index: -1;
+    pointer-events: none;
+    animation: zenBreathing 15s infinite alternate ease-in-out;
+}
+
+body.zen-mode-active.dark-mode::before {
+    background: radial-gradient(circle at 20% 20%, rgba(14, 165, 164, 0.1) 0%, transparent 60%),
+                radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.08) 0%, transparent 60%);
+}
+
+@keyframes zenBreathing {
+    0% { opacity: 0.5; transform: scale(1); }
+    100% { opacity: 1; transform: scale(1.04); }
+}
+
+/* Zen Progress Ring */
+.zen-progress-ring-container {
+    position: fixed;
+    bottom: 30px;
+    left: 30px;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: rgba(251, 250, 247, 0.85);
+    border: 1px solid rgba(251, 250, 247, 0.4);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    transform: scale(0.8);
+    transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: none;
+    direction: ltr;
+}
+
+body.zen-mode-active .zen-progress-ring-container {
+    opacity: 1;
+    transform: scale(1);
+    pointer-events: auto;
+}
+
+.dark-mode .zen-progress-ring-container {
+    background: rgba(20, 23, 29, 0.85);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.zen-progress-ring-svg {
+    width: 44px;
+    height: 44px;
+    transform: rotate(-90deg);
+}
+
+.zen-progress-ring-track {
+    fill: none;
+    stroke: var(--border-color);
+    stroke-width: 3.5;
+}
+
+.zen-progress-ring-fill {
+    fill: none;
+    stroke: var(--tag-ai);
+    stroke-width: 3.5;
+    stroke-linecap: round;
+    stroke-dasharray: 125.6; /* 2 * PI * r = 2 * 3.14159 * 20 = 125.6 */
+    stroke-dashoffset: 125.6;
+    transition: stroke-dashoffset 0.1s linear;
+}
+
+.zen-progress-ring-text {
+    position: absolute;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-family: var(--font-meta);
+}
+
+/* Zen Waveform Audio Visualizer */
+.zen-waveform-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 45px;
+    pointer-events: none;
+    z-index: 98;
+    opacity: 0;
+    transform: translateY(15px);
+    transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+body.zen-mode-active .zen-waveform-container.active {
+    opacity: 0.6;
+    transform: translateY(0);
+}
+
+#zen-waveform-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/* Spotlight keyboard navigation & styling upgrades */
+.spotlight-group-heading {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    opacity: 0.75;
+    padding: 10px 12px 4px;
+    letter-spacing: 0.5px;
+    margin-top: 10px;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    font-family: var(--font-meta);
+}
+
+.spotlight-item.active {
+    background: rgba(14, 165, 164, 0.12) !important;
+    border-right: 3px solid var(--tag-ai);
+    box-shadow: inset 0 0 4px rgba(14, 165, 164, 0.1);
+}
+
+.spotlight-item-shortcut {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    opacity: 0.8;
+    margin-right: auto; /* Push shortcut to the left side in RTL */
+    background: var(--border-color);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: var(--font-meta);
+    white-space: nowrap;
+}
+
+.dark-mode .spotlight-item-shortcut {
+    background: rgba(255, 255, 255, 0.08);
+}
+
 
 

@@ -766,7 +766,7 @@ function performArticleDetailTransition(article) {
     } else {
         ELEMENTS.aiSummaryContent.classList.add("collapse-summary");
         ELEMENTS.aiSummaryText.textContent = "اضغط على الزر أعلاه لتوليد ملخص سريع للمقال بواسطة نموذج سرد الذكي.";
-        ELEMENTS.generateAiSummaryBtn.innerHTML = `<span>توليد الملخص الآن</span> <i data-lucide="wand-2"></i>`;
+        ELEMENTS.generateAiSummaryBtn.innerHTML = `<span>توليد الملخص الآن</span> <i data-lucide="cpu"></i>`;
         ELEMENTS.generateAiSummaryBtn.style.opacity = "1";
         ELEMENTS.generateAiSummaryBtn.disabled = false;
     }
@@ -1569,7 +1569,7 @@ function renderSpotlightResults() {
     if (!query && matches.length === ARTICLES_DATABASE.length) {
         ELEMENTS.spotlightResultsContainer.innerHTML = `
             <div class="spotlight-empty-state">
-                <i data-lucide="sparkles"></i>
+                <i data-lucide="scan-text"></i>
                 <p>ابدأ كتابة عنوان المقال أو الموضوع للبحث الفوري...</p>
                 <span>تلميحة: اضغط على <kbd>Ctrl</kbd> + <kbd>K</kbd> في أي وقت لفتح محرك البحث السريع!</span>
             </div>
@@ -1770,9 +1770,10 @@ function loadZenSettings() {
     
     applyZenFontSize();
     
-    // Apply Zen Mode if saved as active
+    // Don't auto-restore Zen mode on page load to avoid hiding header/footer
+    // on non-article views. Clear persisted state so it starts fresh.
     if (savedZen) {
-        toggleZenMode(true);
+        localStorage.setItem("sard_zen_active", "false");
     }
 }
 
@@ -2707,7 +2708,7 @@ function renderArticleInteractiveWidget(articleId) {
                         <div class="sandbox-custom-row">
                             <input type="text" id="sandbox-prompt-input" placeholder="مثال: بطاقة داكنة مع زر متوهج..." value="بطاقة متألقة مع هالة مضيئة">
                             <button id="sandbox-generate-btn">
-                                <i data-lucide="wand-2"></i>
+                                <i data-lucide="cpu"></i>
                                 <span>توليد</span>
                             </button>
                         </div>
@@ -2863,7 +2864,7 @@ const AIChatCompanion = {
         if (messagesBox) {
             messagesBox.innerHTML = `
                 <div class="chat-message bot-message">
-                    <div class="chat-avatar"><i data-lucide="bot"></i></div>
+                    <div class="chat-avatar"><i data-lucide="brain"></i></div>
                     <div class="chat-text">أهلاً بك! أنا مساعد سرد الذكي، يمكنك سؤالي حول محتوى هذا المقال أو اختيار أحد الأسئلة المقترحة بالأسفل.</div>
                 </div>
             `;
@@ -2925,7 +2926,7 @@ const AIChatCompanion = {
         const botLoading = document.createElement("div");
         botLoading.className = "chat-message bot-message bot-loading-bubble";
         botLoading.innerHTML = `
-            <div class="chat-avatar"><i data-lucide="bot"></i></div>
+            <div class="chat-avatar"><i data-lucide="brain"></i></div>
             <div class="chat-text"><i data-lucide="loader-2" class="animate-spin" style="width:14px; height:14px;"></i> جاري التفكير وصياغة الإجابة...</div>
         `;
         messagesBox.appendChild(botLoading);
@@ -2945,7 +2946,7 @@ const AIChatCompanion = {
             const botMsg = document.createElement("div");
             botMsg.className = "chat-message bot-message";
             botMsg.innerHTML = `
-                <div class="chat-avatar"><i data-lucide="bot"></i></div>
+                <div class="chat-avatar"><i data-lucide="brain"></i></div>
                 <div class="chat-text"></div>
             `;
             messagesBox.appendChild(botMsg);
